@@ -1,4 +1,4 @@
-#requires -version 5.1
+﻿#requires -version 5.1
 <#
   Levanta todo el sistema (PostgreSQL + backend + frontend) con un solo paso.
   Pensado para ejecutarse via iniciar.bat (doble clic) en Windows.

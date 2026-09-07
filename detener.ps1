@@ -1,4 +1,4 @@
-#requires -version 5.1
+﻿#requires -version 5.1
 <#
   Detiene el backend y el frontend iniciados por iniciar.ps1 / iniciar.bat.
 #>

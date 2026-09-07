@@ -29,7 +29,25 @@ plantillas/ Plantillas y archivos de ejemplo para el centro de cargas de datos
 - Node.js 20+
 - PostgreSQL 14+ (probado con 16)
 
-## Puesta en marcha (entorno de desarrollo/demo)
+## Puesta en marcha automática (recomendado)
+
+Con PostgreSQL y Node.js 20+ instalados, un solo comando deja todo arriba: crea el rol
+y la base de datos si no existen, instala dependencias, aplica migraciones, siembra los
+datos de demostración y levanta backend y frontend en segundo plano.
+
+```bash
+./iniciar.sh
+```
+
+Al terminar muestra la URL (`http://localhost:5173`) y las credenciales de demostración.
+Es seguro volver a ejecutarlo (todos los pasos son idempotentes). Los logs quedan en
+`logs/backend.log` y `logs/frontend.log`. Para detener ambos procesos:
+
+```bash
+./detener.sh
+```
+
+## Puesta en marcha manual (paso a paso, para entender o personalizar cada parte)
 
 ```bash
 # 1) Base de datos

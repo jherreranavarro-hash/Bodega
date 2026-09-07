@@ -31,7 +31,7 @@ await paso("cargar login", async () => {
 
 await paso("iniciar sesión", async () => {
   await page.fill('input[type="email"]', "admin@bodegademo.cl");
-  await page.fill('input[type="password"]', "Demo1234!");
+  await page.fill('input[type="password"]', "ASgSrfXMMQ*3");
   await page.click('button[type="submit"]');
   await page.waitForSelector("text=Tablero de decisiones", { timeout: 10000 });
 });

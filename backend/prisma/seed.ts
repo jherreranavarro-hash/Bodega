@@ -247,22 +247,22 @@ async function main() {
     create: { empresaId: empresa.id, categoria: "BAJA", codigo: "DANO_IRREPARABLE", nombre: "Daño irreparable", requiereEvidencia: true },
   });
 
-  console.log("Creando usuarios demo (contraseña: Demo1234!) ...");
-  const passwordHash = await bcrypt.hash("Demo1234!", 10);
-  for (const [email, nombre, rolCodigo] of [
-    ["admin@bodegademo.cl", "Administradora del Sistema", "administrador"],
-    ["jefe.bodega@bodegademo.cl", "Jefe de Bodega", "jefe_bodega"],
-    ["operador@bodegademo.cl", "Operador de Bodega", "operador"],
-    ["compras@bodegademo.cl", "Analista de Compras", "compras"],
-    ["solicitante@bodegademo.cl", "Solicitante de Área", "solicitante"],
-    ["aprobador@bodegademo.cl", "Aprobador", "aprobador"],
-    ["auditor@bodegademo.cl", "Auditor Interno", "auditor"],
-    ["gerencia@bodegademo.cl", "Gerencia", "gerencia"],
+  console.log("Creando usuarios demo (contraseñas individuales, ver README.md) ...");
+  for (const [email, nombre, rolCodigo, password] of [
+    ["admin@bodegademo.cl", "Administradora del Sistema", "administrador", "ASgSrfXMMQ*3"],
+    ["jefe.bodega@bodegademo.cl", "Jefe de Bodega", "jefe_bodega", "TdsdEQRSbg@3"],
+    ["operador@bodegademo.cl", "Operador de Bodega", "operador", "HTB9GHm7PU=6"],
+    ["compras@bodegademo.cl", "Analista de Compras", "compras", "WzFucgkvri=7"],
+    ["solicitante@bodegademo.cl", "Solicitante de Área", "solicitante", "sAinLEi6d8+5"],
+    ["aprobador@bodegademo.cl", "Aprobador", "aprobador", "znNvKKFXhF*4"],
+    ["auditor@bodegademo.cl", "Auditor Interno", "auditor", "9Dbm4vXQem@3"],
+    ["gerencia@bodegademo.cl", "Gerencia", "gerencia", "MNDm8tzvEr*3"],
   ] as const) {
     const rol = await prisma.rol.findUniqueOrThrow({ where: { codigo: rolCodigo } });
+    const passwordHash = await bcrypt.hash(password, 10);
     await prisma.usuario.upsert({
       where: { email },
-      update: {},
+      update: { passwordHash },
       create: { empresaId: empresa.id, email, nombre, passwordHash, rolId: rol.id },
     });
   }

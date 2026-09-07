@@ -140,15 +140,15 @@ cat <<EOF
 
  Abre:  http://localhost:5173
 
- Usuarios de demostración (contraseña: Demo1234!):
-   admin@bodegademo.cl          Administrador
-   jefe.bodega@bodegademo.cl    Jefe de Bodega
-   operador@bodegademo.cl       Operador de Bodega
-   compras@bodegademo.cl        Compras
-   solicitante@bodegademo.cl    Solicitante
-   aprobador@bodegademo.cl      Aprobador
-   auditor@bodegademo.cl        Auditor
-   gerencia@bodegademo.cl       Gerencia
+ Usuarios de demostración (cada uno con su propia contraseña, ver README.md):
+   admin@bodegademo.cl          Administrador          ASgSrfXMMQ*3
+   jefe.bodega@bodegademo.cl    Jefe de Bodega          TdsdEQRSbg@3
+   operador@bodegademo.cl       Operador de Bodega      HTB9GHm7PU=6
+   compras@bodegademo.cl        Compras                 WzFucgkvri=7
+   solicitante@bodegademo.cl    Solicitante             sAinLEi6d8+5
+   aprobador@bodegademo.cl      Aprobador               znNvKKFXhF*4
+   auditor@bodegademo.cl        Auditor                 9Dbm4vXQem@3
+   gerencia@bodegademo.cl       Gerencia                MNDm8tzvEr*3
 
  Logs:      logs/backend.log, logs/frontend.log
  Detener:   ./detener.sh

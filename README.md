@@ -81,18 +81,18 @@ npm run dev                # UI en http://localhost:5173 (proxy /api -> :4000)
 
 ### Usuarios de demostración
 
-Todos con contraseña `Demo1234!` (cámbiala antes de cualquier uso real):
+Cada usuario tiene su propia contraseña (cámbialas antes de cualquier uso real):
 
-| Correo | Rol |
-|---|---|
-| admin@bodegademo.cl | Administrador |
-| jefe.bodega@bodegademo.cl | Jefe de Bodega |
-| operador@bodegademo.cl | Operador de Bodega |
-| compras@bodegademo.cl | Compras |
-| solicitante@bodegademo.cl | Solicitante |
-| aprobador@bodegademo.cl | Aprobador |
-| auditor@bodegademo.cl | Auditor |
-| gerencia@bodegademo.cl | Gerencia |
+| Correo | Rol | Contraseña |
+|---|---|---|
+| admin@bodegademo.cl | Administrador | `ASgSrfXMMQ*3` |
+| jefe.bodega@bodegademo.cl | Jefe de Bodega | `TdsdEQRSbg@3` |
+| operador@bodegademo.cl | Operador de Bodega | `HTB9GHm7PU=6` |
+| compras@bodegademo.cl | Compras | `WzFucgkvri=7` |
+| solicitante@bodegademo.cl | Solicitante | `sAinLEi6d8+5` |
+| aprobador@bodegademo.cl | Aprobador | `znNvKKFXhF*4` |
+| auditor@bodegademo.cl | Auditor | `9Dbm4vXQem@3` |
+| gerencia@bodegademo.cl | Gerencia | `MNDm8tzvEr*3` |
 
 Estos datos de demostración están claramente separados del esquema productivo: viven
 en `prisma/seed.ts` y se identifican con el RUT `RUT-*`/`76.123.456-7` y códigos

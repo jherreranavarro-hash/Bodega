@@ -5,11 +5,24 @@
 #>
 
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 $Raiz = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Raiz
 
 function Log($msg) { Write-Host "==> $msg" }
 function Falla($msg) { Write-Host ""; Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
+
+# Ejecuta un comando externo (npm/npx) y detiene el script si falla: a
+# diferencia de los cmdlets de PowerShell, un .exe/.cmd que termina con
+# código de salida distinto de cero NO dispara $ErrorActionPreference, así
+# que sin este chequeo el script seguiría adelante con una base de datos a
+# medio migrar o sin sembrar.
+function Ejecutar($descripcion, [ScriptBlock]$bloque) {
+  & $bloque
+  if ($LASTEXITCODE -ne 0) {
+    Falla "$descripcion falló (código $LASTEXITCODE). Revisa el mensaje de arriba."
+  }
+}
 
 function Actualizar-Path {
   $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
@@ -115,20 +128,31 @@ if ($PgSuperPass) {
   $env:PGPASSWORD = $PgSuperPass
   try {
     $existeRol = & $PsqlPath -h localhost -U postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DbUser'" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      Falla "No se pudo conectar a PostgreSQL como 'postgres'. La contraseña ingresada es incorrecta (o el usuario/puerto no son los esperados)."
+    }
     if ($existeRol -ne "1") {
       Log "Creando rol de base de datos '$DbUser'..."
       & $PsqlPath -h localhost -U postgres -c "CREATE ROLE `"$DbUser`" LOGIN PASSWORD '$DbPass';" | Out-Null
+      if ($LASTEXITCODE -ne 0) { Falla "No se pudo crear el rol '$DbUser'." }
     }
     $existeBd = & $PsqlPath -h localhost -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DbName'" 2>$null
     if ($existeBd -ne "1") {
       Log "Creando base de datos '$DbName'..."
       & $PsqlPath -h localhost -U postgres -c "CREATE DATABASE `"$DbName`" OWNER `"$DbUser`";" | Out-Null
+      if ($LASTEXITCODE -ne 0) { Falla "No se pudo crear la base de datos '$DbName'." }
     }
   } finally {
     Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue
   }
 } else {
-  Log "Omitiendo creación de rol/base (sin contraseña de superusuario). Si ya existen, no hay problema."
+  $env:PGPASSWORD = $DbPass
+  $existeYa = & $PsqlPath -h localhost -U $DbUser -d $DbName -tAc "SELECT 1" 2>$null
+  Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue
+  if ($LASTEXITCODE -ne 0) {
+    Falla "Omitiste la contraseña del superusuario y el rol/base de backend\.env ('$DbUser'/'$DbName') no existen o no aceptan esas credenciales. Vuelve a ejecutar iniciar.bat y esta vez ingresa la contraseña del superusuario 'postgres' para poder crearlos."
+  }
+  Log "Rol/base ya existen y aceptan las credenciales de backend\.env, continuando."
 }
 
 # ---------------------------------------------------------------------------
@@ -137,22 +161,22 @@ if ($PgSuperPass) {
 if (-not (Test-Path "backend\node_modules")) {
   Log "Instalando dependencias del backend..."
   Push-Location backend
-  npm install
+  Ejecutar "npm install (backend)" { npm install }
   Pop-Location
 }
 if (-not (Test-Path "frontend\node_modules")) {
   Log "Instalando dependencias del frontend..."
   Push-Location frontend
-  npm install
+  Ejecutar "npm install (frontend)" { npm install }
   Pop-Location
 }
 
 Log "Aplicando migraciones..."
 Push-Location backend
-npx prisma migrate deploy
-npx prisma generate
+Ejecutar "prisma migrate deploy" { npx prisma migrate deploy }
+Ejecutar "prisma generate" { npx prisma generate }
 Log "Sembrando datos de demostración (idempotente, seguro repetir)..."
-npm run seed
+Ejecutar "npm run seed" { npm run seed }
 Pop-Location
 
 # ---------------------------------------------------------------------------

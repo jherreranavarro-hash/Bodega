@@ -13,6 +13,7 @@ const RECURSOS_ACCIONES: [string, string[]][] = [
   ["recepciones", ["consultar", "crear"]],
   ["solicitudes_salida", ["consultar", "crear", "aprobar"]],
   ["reservas", ["consultar", "crear"]],
+  ["preparaciones", ["consultar", "crear", "ejecutar"]],
   ["despachos", ["consultar", "ejecutar"]],
   ["transferencias", ["consultar", "ejecutar"]],
   ["devoluciones", ["consultar", "crear", "ejecutar"]],
@@ -27,13 +28,13 @@ const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.acc
     nombre: "Jefe de Bodega",
     permisos: [
       "productos.consultar", "bodegas.*", "ubicaciones.*", "cargas.consultar", "cargas.aprobar",
-      "compras.consultar", "recepciones.*", "solicitudes_salida.*", "reservas.*", "despachos.*",
+      "compras.consultar", "recepciones.*", "solicitudes_salida.*", "reservas.*", "preparaciones.*", "despachos.*",
       "transferencias.*", "devoluciones.*", "conteos.*", "ajustes.consultar", "ajustes.aprobar", "indicadores.consultar",
     ],
   },
   operador: {
     nombre: "Operador de Bodega",
-    permisos: ["productos.consultar", "recepciones.crear", "reservas.crear", "despachos.ejecutar", "transferencias.ejecutar", "devoluciones.consultar", "devoluciones.crear", "conteos.ejecutar", "indicadores.consultar"],
+    permisos: ["productos.consultar", "recepciones.crear", "reservas.crear", "preparaciones.consultar", "preparaciones.crear", "preparaciones.ejecutar", "despachos.ejecutar", "transferencias.ejecutar", "devoluciones.consultar", "devoluciones.crear", "conteos.ejecutar", "indicadores.consultar"],
   },
   compras: {
     nombre: "Compras",

@@ -62,6 +62,13 @@ export async function contabilizarDespacho(datos: DatosDespacho) {
   if (datos.detalle.length === 0) throw new ErrorValidacion("El despacho no tiene líneas");
 
   return prisma.$transaction(async (tx) => {
+    if (datos.preparacionId) {
+      const preparacion = await tx.preparacion.findUniqueOrThrow({ where: { id: datos.preparacionId } });
+      if (preparacion.estado !== "LISTA") {
+        throw new ErrorValidacion("La preparación referenciada debe estar en estado LISTA antes de despachar");
+      }
+    }
+
     const operacion = await crearOperacion(tx, {
       empresaId: datos.empresaId,
       bodegaId: datos.bodegaId,

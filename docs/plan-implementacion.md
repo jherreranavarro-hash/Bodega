@@ -33,27 +33,33 @@ cuarentena o baja definitiva (esta última con motivo y evidencia obligatorios c
 motivo lo exige); separación de funciones entre quien registra y quien resuelve. Cubierto
 por 4 pruebas de aceptación (`tests/devoluciones.test.ts`) y por el smoke test de UI.
 
+## Fase 2.2 — Preparación como paso explícito (completada en esta iteración)
+Lista de preparación generada desde una solicitud de salida, con verificación línea a
+línea (sin exceder lo solicitado) y transición explícita a `LISTA`. El despacho rechaza
+—a nivel de servicio, no solo de UI— referenciar una preparación que no esté `LISTA`
+(`modules/despachos/despacho.service.ts`). La preparación es opcional: un despacho
+directo desde la reserva sigue funcionando quien no la necesite. Cubierto por 3 pruebas
+(`tests/preparaciones.test.ts`) y por el smoke test de UI (flujo completo solicitud →
+reserva → preparación → verificación → despacho).
+
 ## Fase 3 — Pendiente explícito de alta prioridad
 Estas son las brechas más importantes respecto del alcance completo del encargo
 (sección 2). Se documentan aquí en vez de darlas por hechas:
 
-1. **Preparación como paso explícito** entre reserva y despacho (hoy el despacho puede
-   ejecutarse directo desde la reserva; el modelo de datos para `preparaciones` ya
-   existe).
-2. **Solicitudes de compra con aprobación propia** antes de convertirse en orden de
+1. **Solicitudes de compra con aprobación propia** antes de convertirse en orden de
    compra (hoy la conversión existe a nivel de datos; falta el flujo de aprobación
    dedicado y su vínculo con las alertas de reposición).
-3. **Bandeja de decisiones** (alertas → acción propuesta → aceptar/rechazar/postergar/
+2. **Bandeja de decisiones** (alertas → acción propuesta → aceptar/rechazar/postergar/
    convertir en solicitud, con justificación). Los indicadores que la alimentarían ya
    existen; falta la capa de generación automática de alertas y su UI.
-4. **Pronósticos y escenarios de simulación** (`pronosticos`, `escenarios` en el
+3. **Pronósticos y escenarios de simulación** (`pronosticos`, `escenarios` en el
    modelo): sin cálculo implementado. No se debe mostrar una precisión que no existe —
    por eso no hay ningún endpoint que "invente" un pronóstico todavía.
-5. **Script de reconciliación de saldos** contra el historial de movimientos (ver
+4. **Script de reconciliación de saldos** contra el historial de movimientos (ver
    `docs/modelo-datos.md` §5).
-6. **Manejo de períodos cerrados** y de registros con fecha efectiva atrasada más allá
+5. **Manejo de períodos cerrados** y de registros con fecha efectiva atrasada más allá
    de la separación de campos ya existente en el modelo.
-7. **Multimoneda real**: el modelo guarda `moneda`/`tipo_cambio` en capas de costo, pero
+6. **Multimoneda real**: el modelo guarda `moneda`/`tipo_cambio` en capas de costo, pero
    no hay conversión ni consolidación multimoneda en los indicadores.
 
 ## Fase 4 — Endurecimiento operativo (pendiente)

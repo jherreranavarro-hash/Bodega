@@ -70,7 +70,7 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 | Recepción y almacenamiento | Implementado | `modules/recepciones` |
 | Inventario y trazabilidad | Implementado (motor central) | `modules/inventario` |
 | Solicitudes y reservas | Implementado | `modules/salidas` |
-| Preparación y despacho | Despacho implementado; preparación modelada en datos, sin flujo de UI propio | `modules/despachos` |
+| Preparación y despacho | Implementado (preparación opcional, exigida como `LISTA` cuando el despacho la referencia) | `modules/preparaciones`, `modules/despachos` |
 | Transferencias | Implementado | `modules/transferencias` |
 | Devoluciones y excepciones | Implementado (ingreso a cuarentena → resolución reingreso/cuarentena/baja) | `modules/devoluciones` |
 | Conteos y ajustes | Implementado | `modules/ajustes` |

@@ -74,13 +74,20 @@ iniciado en este entregable).
 - Pendiente: aprobación explícita de la solicitud antes de reservar (hoy se crea ya
   `APROBADA` para simplificar la demo — el estado y el campo existen para endurecerlo).
 
-## Preparación y despacho — Despacho implementado; preparación parcial
+## Preparación y despacho — Implementado
+- `/api/preparaciones`: crea una lista de preparación desde una solicitud de salida (una
+  línea por línea de la solicitud), permite verificar cada línea
+  (`cantidadVerificada`, sin poder exceder lo solicitado) y marcar la preparación como
+  `LISTA` — que exige que **toda** línea esté completamente verificada.
 - `/api/salidas/despachos`: consume la reserva en la misma transacción, aplica costo
-  FIFO o deja el costo pendiente si no hay capas suficientes.
-- **Modelo de datos completo para preparación** (`preparaciones`,
-  `preparaciones_detalle`) pero sin servicio/API propio en esta iteración — el despacho
-  puede ejecutarse directamente desde la reserva, sin pasar por un paso de preparación
-  separado.
+  FIFO o deja el costo pendiente si no hay capas suficientes. Si el despacho referencia
+  una `preparacionId`, se **rechaza** a menos que esa preparación esté en estado `LISTA`
+  (validación de negocio, no solo de UI).
+- La preparación es opcional: un despacho puede seguir haciéndose directo desde la
+  reserva sin pasar por preparación cuando la operación no lo requiere (p.ej. bodegas
+  pequeñas de un solo operador).
+- Pendiente: embalaje multi-bulto y evidencia de entrega como archivo adjunto (hoy
+  `Despacho.evidenciaUrl` es solo una URL de texto).
 
 ## Transferencias — Implementado
 - Despacho (origen → tránsito) y recepción (tránsito → destino) en dos pasos, sin doble

@@ -57,9 +57,35 @@ await paso("compras y recepción visible", async () => {
   await page.waitForSelector("text=Nueva orden de compra");
 });
 
-await paso("solicitudes reservas despacho visible", async () => {
+const folioSolicitud = `SS-SMOKE-${Date.now()}`;
+await paso("flujo real: solicitud -> reserva -> preparación -> despacho", async () => {
   await page.click('a:has-text("Solicitudes, Reservas y Despacho")');
   await page.waitForSelector("text=Nueva solicitud de salida");
+
+  await page.fill('form:has-text("Nueva solicitud de salida") input:near(:text("Folio"))', folioSolicitud);
+  await page.selectOption('form:has-text("Nueva solicitud de salida") select >> nth=0', { label: "BOD-CENTRAL" });
+  await page.selectOption('form:has-text("Nueva solicitud de salida") select >> nth=1', { label: "PROD-001" });
+  await page.fill('form:has-text("Nueva solicitud de salida") input[type="number"]', "5");
+  await page.click('form:has-text("Nueva solicitud de salida") button[type="submit"]');
+
+  const tarjeta = page.locator(".tarjeta", { hasText: folioSolicitud });
+  await tarjeta.waitFor({ timeout: 10000 });
+
+  await tarjeta.getByRole("button", { name: "Reservar" }).click();
+  await tarjeta.getByRole("button", { name: "Crear lista de preparación" }).waitFor({ timeout: 10000 });
+  await tarjeta.getByRole("button", { name: "Crear lista de preparación" }).click();
+
+  await tarjeta.locator('input[type="number"]').last().waitFor({ timeout: 10000 });
+  await tarjeta.locator('input[type="number"]').last().fill("5");
+  await tarjeta.getByRole("button", { name: "Verificar" }).click();
+
+  await tarjeta.getByRole("button", { name: "Marcar preparación como lista" }).waitFor({ timeout: 10000 });
+  await tarjeta.getByRole("button", { name: "Marcar preparación como lista" }).click();
+
+  await tarjeta.getByRole("button", { name: /Despachar remanente/ }).waitFor({ timeout: 10000 });
+  await tarjeta.getByRole("button", { name: /Despachar remanente/ }).click();
+
+  await tarjeta.getByText("Sin remanente").waitFor({ timeout: 10000 });
 });
 
 await paso("transferencias visible", async () => {

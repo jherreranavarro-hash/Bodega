@@ -18,11 +18,12 @@ residuales de una corrida anterior):
 ✓ tests/inventario.test.ts (7 tests)
 ✓ tests/devoluciones.test.ts (4 tests)
 ✓ tests/cargas.test.ts (4 tests)
+✓ tests/preparaciones.test.ts (3 tests)
 ✓ tests/ajustes.test.ts (1 test)
 ✓ tests/api.test.ts (3 tests)
 
-Test Files  5 passed (5)
-     Tests  19 passed (19)
+Test Files  6 passed (6)
+     Tests  22 passed (22)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -54,6 +55,10 @@ Adicionalmente se prueba (más allá del mínimo pedido):
   motivo y evidencia cuando el motivo la requiere; resolverla como
   `REINGRESO_DISPONIBLE` sí libera el stock; y quien registró la devolución no puede
   resolverla (separación de funciones).
+- **Preparación como paso explícito** (`tests/preparaciones.test.ts`): un despacho que
+  referencia una preparación se rechaza si esa preparación no está `LISTA`; no se puede
+  marcar `LISTA` con líneas parcialmente verificadas; no se puede verificar más cantidad
+  de la solicitada; y una vez lista, el despacho procede normalmente.
 
 ## Evidencia de la aplicación real (no solo servicios)
 

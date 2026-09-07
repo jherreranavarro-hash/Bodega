@@ -9,6 +9,7 @@ import { catalogosRouter } from "./modules/maestros/catalogos.routes.js";
 import { cargasRouter } from "./modules/cargas/carga.routes.js";
 import { comprasRouter } from "./modules/compras/compras.routes.js";
 import { salidasRouter } from "./modules/salidas/salidas.routes.js";
+import { preparacionesRouter } from "./modules/preparaciones/preparaciones.routes.js";
 import { transferenciasRouter } from "./modules/transferencias/transferencias.routes.js";
 import { devolucionesRouter } from "./modules/devoluciones/devoluciones.routes.js";
 import { ajustesRouter } from "./modules/ajustes/ajustes.routes.js";
@@ -30,6 +31,7 @@ export function crearApp() {
   app.use("/api/cargas", cargasRouter);
   app.use("/api/compras", comprasRouter);
   app.use("/api/salidas", salidasRouter);
+  app.use("/api/preparaciones", preparacionesRouter);
   app.use("/api/transferencias", transferenciasRouter);
   app.use("/api/devoluciones", devolucionesRouter);
   app.use("/api", ajustesRouter);

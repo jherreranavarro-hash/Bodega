@@ -13,12 +13,30 @@ mkdir -p logs .pids
 log() { echo "==> $*"; }
 
 # ---------------------------------------------------------------------------
-# 1) PostgreSQL: verifica que esté disponible; intenta iniciarlo si no lo está.
+# 1) backend/.env: lo crea desde .env.example si no existe, y se lee el
+#    usuario/contraseña/base/puerto que la aplicación va a usar. El puerto
+#    importa si hay más de una instalación de PostgreSQL en la máquina (cada
+#    una escucha en un puerto distinto).
 # ---------------------------------------------------------------------------
-pg_listo() { pg_isready -h localhost -p 5432 >/dev/null 2>&1; }
+if [ ! -f backend/.env ]; then
+  log "Creando backend/.env desde .env.example (datos de desarrollo, no productivos)..."
+  cp backend/.env.example backend/.env
+fi
+
+DATABASE_URL="$(grep -E '^DATABASE_URL=' backend/.env | sed -E 's/^DATABASE_URL="?([^"]*)"?$/\1/')"
+DB_USER="$(echo "$DATABASE_URL" | sed -E 's#postgresql://([^:]+):.*#\1#')"
+DB_PASS="$(echo "$DATABASE_URL" | sed -E 's#postgresql://[^:]+:([^@]+)@.*#\1#')"
+DB_PORT="$(echo "$DATABASE_URL" | sed -E 's#.*@[^:@]+:([0-9]+)/.*#\1#')"
+DB_NAME="$(echo "$DATABASE_URL" | sed -E 's#.*/([^/?]+)(\?.*)?$#\1#')"
+log "backend/.env apunta a localhost:$DB_PORT, base '$DB_NAME', usuario '$DB_USER'."
+
+# ---------------------------------------------------------------------------
+# 2) PostgreSQL: verifica que esté disponible; intenta iniciarlo si no lo está.
+# ---------------------------------------------------------------------------
+pg_listo() { pg_isready -h localhost -p "$DB_PORT" >/dev/null 2>&1; }
 
 if ! pg_listo; then
-  log "PostgreSQL no responde en localhost:5432, intentando iniciarlo..."
+  log "PostgreSQL no responde en localhost:$DB_PORT, intentando iniciarlo..."
   if command -v service >/dev/null 2>&1; then
     service postgresql start >/dev/null 2>&1 || true
   fi
@@ -36,32 +54,19 @@ if ! pg_listo; then
 fi
 
 if ! pg_listo; then
-  echo "ERROR: no se pudo iniciar PostgreSQL automáticamente." >&2
-  echo "Instálalo/inícialo manualmente y vuelve a ejecutar ./iniciar.sh" >&2
+  echo "ERROR: no se pudo iniciar PostgreSQL automáticamente en el puerto $DB_PORT." >&2
+  echo "Instálalo/inícialo manualmente, confirma el puerto en backend/.env, y vuelve a ejecutar ./iniciar.sh" >&2
   exit 1
 fi
-log "PostgreSQL disponible."
-
-# ---------------------------------------------------------------------------
-# 2) backend/.env: lo crea desde .env.example si no existe.
-# ---------------------------------------------------------------------------
-if [ ! -f backend/.env ]; then
-  log "Creando backend/.env desde .env.example (datos de desarrollo, no productivos)..."
-  cp backend/.env.example backend/.env
-fi
-
-DATABASE_URL="$(grep -E '^DATABASE_URL=' backend/.env | sed -E 's/^DATABASE_URL="?([^"]*)"?$/\1/')"
-DB_USER="$(echo "$DATABASE_URL" | sed -E 's#postgresql://([^:]+):.*#\1#')"
-DB_PASS="$(echo "$DATABASE_URL" | sed -E 's#postgresql://[^:]+:([^@]+)@.*#\1#')"
-DB_NAME="$(echo "$DATABASE_URL" | sed -E 's#.*/([^/?]+)(\?.*)?$#\1#')"
+log "PostgreSQL disponible en el puerto $DB_PORT."
 
 # ---------------------------------------------------------------------------
 # 3) Rol y base de datos: los crea si no existen (mejor esfuerzo, no falla el
 #    script si este entorno ya tiene su propia forma de administrar Postgres).
 # ---------------------------------------------------------------------------
-PSQL="psql -h localhost -U postgres"
+PSQL="psql -h localhost -p $DB_PORT -U postgres"
 if command -v sudo >/dev/null 2>&1 && id postgres >/dev/null 2>&1; then
-  PSQL="sudo -u postgres psql"
+  PSQL="sudo -u postgres psql -p $DB_PORT"
 fi
 
 if $PSQL -tc "SELECT 1" >/dev/null 2>&1; then
@@ -70,8 +75,8 @@ if $PSQL -tc "SELECT 1" >/dev/null 2>&1; then
   $PSQL -tc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" 2>/dev/null | grep -q 1 \
     || { log "Creando base de datos '$DB_NAME'..."; $PSQL -c "CREATE DATABASE \"$DB_NAME\" OWNER \"$DB_USER\";" >/dev/null; }
 else
-  log "Aviso: no pude conectar como superusuario de Postgres para verificar rol/base."
-  log "Si backend/.env apunta a un rol/base que ya existe, esto no es un problema."
+  log "Aviso: no pude conectar como superusuario de Postgres en el puerto $DB_PORT para verificar rol/base."
+  log "Si backend/.env apunta a un rol/base que ya existe con esas credenciales, esto no es un problema."
 fi
 
 # ---------------------------------------------------------------------------

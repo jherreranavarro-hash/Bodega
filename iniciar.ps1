@@ -45,7 +45,28 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 Log "Node.js disponible: $(node --version)"
 
 # ---------------------------------------------------------------------------
-# 2) PostgreSQL: lo instala con winget si no está, y arranca el servicio.
+# 2) backend\.env: lo crea desde .env.example si no existe, y se lee el
+#    usuario/contraseña/base/puerto que la aplicación va a usar. El puerto
+#    importa especialmente si ya tienes más de una instalación de PostgreSQL
+#    en la máquina (cada una escucha en un puerto distinto).
+# ---------------------------------------------------------------------------
+if (-not (Test-Path "backend\.env")) {
+  Log "Creando backend\.env desde .env.example (datos de desarrollo, no productivos)..."
+  Copy-Item "backend\.env.example" "backend\.env"
+}
+
+$envTexto = Get-Content "backend\.env" -Raw
+if ($envTexto -notmatch 'DATABASE_URL="postgresql://([^:]+):([^@]+)@[^:@/]+:(\d+)/([^"?]+)') {
+  Falla "No se pudo interpretar DATABASE_URL en backend\.env (se espera el formato postgresql://usuario:clave@host:puerto/base)"
+}
+$DbUser = $Matches[1]
+$DbPass = $Matches[2]
+$DbPort = $Matches[3]
+$DbName = $Matches[4]
+Log "backend\.env apunta a localhost:$DbPort, base '$DbName', usuario '$DbUser'."
+
+# ---------------------------------------------------------------------------
+# 3) PostgreSQL: lo instala con winget si no está, y arranca el servicio.
 # ---------------------------------------------------------------------------
 function Buscar-BinarioPg($nombre) {
   $cmd = Get-Command $nombre -ErrorAction SilentlyContinue
@@ -80,12 +101,12 @@ if ($servicioPg -and $servicioPg.Status -ne "Running") {
 $listo = $false
 for ($i = 0; $i -lt 20; $i++) {
   if ($PgIsReadyPath) {
-    & $PgIsReadyPath -h localhost -p 5432 *> $null
+    & $PgIsReadyPath -h localhost -p $DbPort *> $null
     if ($LASTEXITCODE -eq 0) { $listo = $true; break }
   } else {
     try {
       $tcp = New-Object System.Net.Sockets.TcpClient
-      $tcp.Connect("localhost", 5432)
+      $tcp.Connect("localhost", [int]$DbPort)
       $tcp.Close()
       $listo = $true
       break
@@ -94,25 +115,9 @@ for ($i = 0; $i -lt 20; $i++) {
   Start-Sleep -Seconds 1
 }
 if (-not $listo) {
-  Falla "PostgreSQL no respondió en localhost:5432. Revisa que el servicio esté iniciado (services.msc)."
+  Falla "PostgreSQL no respondió en localhost:$DbPort. Revisa que el servicio esté iniciado (services.msc) y que backend\.env tenga el puerto correcto (si tienes más de una instalación de PostgreSQL, cada una usa un puerto distinto — revisa postgresql.conf de cada una)."
 }
-Log "PostgreSQL disponible."
-
-# ---------------------------------------------------------------------------
-# 3) backend\.env: lo crea desde .env.example si no existe.
-# ---------------------------------------------------------------------------
-if (-not (Test-Path "backend\.env")) {
-  Log "Creando backend\.env desde .env.example (datos de desarrollo, no productivos)..."
-  Copy-Item "backend\.env.example" "backend\.env"
-}
-
-$envTexto = Get-Content "backend\.env" -Raw
-if ($envTexto -notmatch 'DATABASE_URL="postgresql://([^:]+):([^@]+)@[^/]+/([^"?]+)') {
-  Falla "No se pudo interpretar DATABASE_URL en backend\.env"
-}
-$DbUser = $Matches[1]
-$DbPass = $Matches[2]
-$DbName = $Matches[3]
+Log "PostgreSQL disponible en el puerto $DbPort."
 
 # ---------------------------------------------------------------------------
 # 4) Rol y base de datos: los crea si no existen (mejor esfuerzo). Requiere
@@ -127,19 +132,19 @@ if (-not $PgSuperPass) {
 if ($PgSuperPass) {
   $env:PGPASSWORD = $PgSuperPass
   try {
-    $existeRol = & $PsqlPath -h localhost -U postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DbUser'" 2>$null
+    $existeRol = & $PsqlPath -h localhost -p $DbPort -U postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DbUser'" 2>$null
     if ($LASTEXITCODE -ne 0) {
-      Falla "No se pudo conectar a PostgreSQL como 'postgres'. La contraseña ingresada es incorrecta (o el usuario/puerto no son los esperados)."
+      Falla "No se pudo conectar a PostgreSQL (localhost:$DbPort) como 'postgres'. La contraseña ingresada es incorrecta (o el usuario/puerto no son los esperados)."
     }
     if ($existeRol -ne "1") {
       Log "Creando rol de base de datos '$DbUser'..."
-      & $PsqlPath -h localhost -U postgres -c "CREATE ROLE `"$DbUser`" LOGIN PASSWORD '$DbPass';" | Out-Null
+      & $PsqlPath -h localhost -p $DbPort -U postgres -c "CREATE ROLE `"$DbUser`" LOGIN PASSWORD '$DbPass';" | Out-Null
       if ($LASTEXITCODE -ne 0) { Falla "No se pudo crear el rol '$DbUser'." }
     }
-    $existeBd = & $PsqlPath -h localhost -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DbName'" 2>$null
+    $existeBd = & $PsqlPath -h localhost -p $DbPort -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DbName'" 2>$null
     if ($existeBd -ne "1") {
       Log "Creando base de datos '$DbName'..."
-      & $PsqlPath -h localhost -U postgres -c "CREATE DATABASE `"$DbName`" OWNER `"$DbUser`";" | Out-Null
+      & $PsqlPath -h localhost -p $DbPort -U postgres -c "CREATE DATABASE `"$DbName`" OWNER `"$DbUser`";" | Out-Null
       if ($LASTEXITCODE -ne 0) { Falla "No se pudo crear la base de datos '$DbName'." }
     }
   } finally {
@@ -147,10 +152,10 @@ if ($PgSuperPass) {
   }
 } else {
   $env:PGPASSWORD = $DbPass
-  $existeYa = & $PsqlPath -h localhost -U $DbUser -d $DbName -tAc "SELECT 1" 2>$null
+  $existeYa = & $PsqlPath -h localhost -p $DbPort -U $DbUser -d $DbName -tAc "SELECT 1" 2>$null
   Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue
   if ($LASTEXITCODE -ne 0) {
-    Falla "Omitiste la contraseña del superusuario y el rol/base de backend\.env ('$DbUser'/'$DbName') no existen o no aceptan esas credenciales. Vuelve a ejecutar iniciar.bat y esta vez ingresa la contraseña del superusuario 'postgres' para poder crearlos."
+    Falla "Omitiste la contraseña del superusuario y el rol/base de backend\.env ('$DbUser'/'$DbName' en el puerto $DbPort) no existen o no aceptan esas credenciales. Vuelve a ejecutar iniciar.bat y esta vez ingresa la contraseña del superusuario 'postgres' para poder crearlos."
   }
   Log "Rol/base ya existen y aceptan las credenciales de backend\.env, continuando."
 }

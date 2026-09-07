@@ -25,29 +25,35 @@ Transferencias entre bodegas (sin doble conteo), conteos cíclicos/generales con
 aprobado por un usuario distinto de quien lo solicitó, valorización FIFO además de
 promedio ponderado, indicadores de reposición/sobrestock/vencimientos/exactitud.
 
+## Fase 2.1 — Devoluciones y excepciones (completada en esta iteración)
+Flujo devolución → inspección → resolución implementado (`modules/devoluciones`): el
+ingreso siempre pasa por una ubicación de cuarentena por bodega (nunca aumenta el stock
+disponible automáticamente); la resolución admite reingreso a disponible, permanencia en
+cuarentena o baja definitiva (esta última con motivo y evidencia obligatorios cuando el
+motivo lo exige); separación de funciones entre quien registra y quien resuelve. Cubierto
+por 4 pruebas de aceptación (`tests/devoluciones.test.ts`) y por el smoke test de UI.
+
 ## Fase 3 — Pendiente explícito de alta prioridad
 Estas son las brechas más importantes respecto del alcance completo del encargo
 (sección 2). Se documentan aquí en vez de darlas por hechas:
 
-1. **Devoluciones y excepciones**: modelo de datos listo; falta el servicio de negocio
-   (inspección → resolución: reingreso/cuarentena/baja) y su API/UI.
-2. **Preparación como paso explícito** entre reserva y despacho (hoy el despacho puede
+1. **Preparación como paso explícito** entre reserva y despacho (hoy el despacho puede
    ejecutarse directo desde la reserva; el modelo de datos para `preparaciones` ya
    existe).
-3. **Solicitudes de compra con aprobación propia** antes de convertirse en orden de
+2. **Solicitudes de compra con aprobación propia** antes de convertirse en orden de
    compra (hoy la conversión existe a nivel de datos; falta el flujo de aprobación
    dedicado y su vínculo con las alertas de reposición).
-4. **Bandeja de decisiones** (alertas → acción propuesta → aceptar/rechazar/postergar/
+3. **Bandeja de decisiones** (alertas → acción propuesta → aceptar/rechazar/postergar/
    convertir en solicitud, con justificación). Los indicadores que la alimentarían ya
    existen; falta la capa de generación automática de alertas y su UI.
-5. **Pronósticos y escenarios de simulación** (`pronosticos`, `escenarios` en el
+4. **Pronósticos y escenarios de simulación** (`pronosticos`, `escenarios` en el
    modelo): sin cálculo implementado. No se debe mostrar una precisión que no existe —
    por eso no hay ningún endpoint que "invente" un pronóstico todavía.
-6. **Script de reconciliación de saldos** contra el historial de movimientos (ver
+5. **Script de reconciliación de saldos** contra el historial de movimientos (ver
    `docs/modelo-datos.md` §5).
-7. **Manejo de períodos cerrados** y de registros con fecha efectiva atrasada más allá
+6. **Manejo de períodos cerrados** y de registros con fecha efectiva atrasada más allá
    de la separación de campos ya existente en el modelo.
-8. **Multimoneda real**: el modelo guarda `moneda`/`tipo_cambio` en capas de costo, pero
+7. **Multimoneda real**: el modelo guarda `moneda`/`tipo_cambio` en capas de costo, pero
    no hay conversión ni consolidación multimoneda en los indicadores.
 
 ## Fase 4 — Endurecimiento operativo (pendiente)

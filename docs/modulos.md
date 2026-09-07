@@ -87,10 +87,21 @@ iniciado en este entregable).
   conteo (`docs/modelo-datos.md` y prueba de aceptación dedicada).
 - Pendiente: anulación/reversa de una transferencia en tránsito.
 
-## Devoluciones y excepciones — Modelo de datos únicamente
-- Tablas `devoluciones` / `devoluciones_detalle` completas (motivo, resolución,
-  reingreso/cuarentena/baja) pero **sin servicio de negocio implementado** en esta
-  iteración. Prioridad alta para la siguiente fase (ver plan de implementación).
+## Devoluciones y excepciones — Implementado
+- Flujo devolución → inspección → resolución (`/api/devoluciones`): el ingreso siempre
+  se registra en una ubicación técnica de cuarentena por bodega (estado `CUARENTENA`),
+  autoprovisionada igual que la de tránsito de transferencias — **nunca** aumenta el
+  stock disponible automáticamente.
+- La resolución (`POST /api/devoluciones/detalle/:id/resolver`) admite
+  `REINGRESO_DISPONIBLE` (mueve a una ubicación de destino en estado `DISPONIBLE`),
+  `CUARENTENA` (queda donde está, sin nuevo movimiento) o `BAJA` (sale definitivamente
+  del stock físico). Dar de baja exige un motivo de categoría `BAJA` y evidencia si el
+  motivo la requiere (igual criterio que en ajustes).
+- Separación de funciones: el usuario que registró el ingreso de la devolución no puede
+  resolver sus líneas.
+- Pendiente: vínculo automático con el despacho de origen para prellenar cantidades
+  (`despachoOrigenId` ya existe en el modelo, hoy se informa manualmente); pantalla de
+  reconteo/inspección con evidencia fotográfica adjunta como archivo (hoy es una URL).
 
 ## Conteos y ajustes — Implementado
 - Conteo ciego opcional, congela `cantidad_esperada` al planificar, genera ajuste desde

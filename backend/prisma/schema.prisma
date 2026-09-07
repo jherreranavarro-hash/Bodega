@@ -246,6 +246,7 @@ model Bodega {
   solicitudesSalida   SolicitudSalida[]
   conteos             Conteo[]
   ajustes             Ajuste[]
+  devoluciones        Devolucion[]
   transferenciasOrigen  Transferencia[] @relation("transferenciaOrigen")
   transferenciasDestino Transferencia[] @relation("transferenciaDestino")
 
@@ -1115,14 +1116,16 @@ enum EstadoDevolucion {
 }
 
 model Devolucion {
-  id                 String           @id @default(uuid())
-  folio              String
-  despachoOrigenId   String?          @map("despacho_origen_id")
-  bodegaId           String           @map("bodega_id")
-  motivoId           String           @map("motivo_id")
-  estado             EstadoDevolucion @default(PENDIENTE_INSPECCION)
-  usuarioId          String           @map("usuario_id")
-  creadoEn           DateTime         @default(now())
+  id                    String           @id @default(uuid())
+  folio                 String
+  despachoOrigenId      String?          @map("despacho_origen_id")
+  bodegaId              String           @map("bodega_id")
+  bodega                Bodega           @relation(fields: [bodegaId], references: [id])
+  motivoId              String           @map("motivo_id")
+  estado                EstadoDevolucion @default(PENDIENTE_INSPECCION)
+  usuarioId             String           @map("usuario_id")
+  operacionIngresoId    String?          @map("operacion_ingreso_id")
+  creadoEn              DateTime         @default(now())
 
   detalle DevolucionDetalle[]
 
@@ -1131,15 +1134,20 @@ model Devolucion {
 }
 
 model DevolucionDetalle {
-  id            String     @id @default(uuid())
-  devolucionId  String     @map("devolucion_id")
-  devolucion    Devolucion @relation(fields: [devolucionId], references: [id])
-  productoId    String     @map("producto_id")
-  loteId        String?    @map("lote_id")
-  serieId       String?    @map("serie_id")
-  cantidad      Decimal    @db.Decimal(18, 6)
-  resolucion    String? // REINGRESO_DISPONIBLE | CUARENTENA | BAJA
-  ubicacionDestinoId String? @map("ubicacion_destino_id")
+  id                  String     @id @default(uuid())
+  devolucionId        String     @map("devolucion_id")
+  devolucion          Devolucion @relation(fields: [devolucionId], references: [id])
+  productoId          String     @map("producto_id")
+  loteId              String?    @map("lote_id")
+  serieId             String?    @map("serie_id")
+  cantidad            Decimal    @db.Decimal(18, 6)
+  resolucion          String? // REINGRESO_DISPONIBLE | CUARENTENA | BAJA
+  ubicacionDestinoId  String?    @map("ubicacion_destino_id")
+  motivoResolucionId  String?    @map("motivo_resolucion_id")
+  evidenciaUrl        String?    @map("evidencia_url")
+  resueltoPorId       String?    @map("resuelto_por_id")
+  operacionResolucionId String?  @map("operacion_resolucion_id")
+  resueltoEn          DateTime?  @map("resuelto_en")
 
   @@map("devoluciones_detalle")
 }

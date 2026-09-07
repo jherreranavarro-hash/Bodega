@@ -16,12 +16,13 @@ residuales de una corrida anterior):
 
 ```
 ✓ tests/inventario.test.ts (7 tests)
+✓ tests/devoluciones.test.ts (4 tests)
 ✓ tests/cargas.test.ts (4 tests)
 ✓ tests/ajustes.test.ts (1 test)
 ✓ tests/api.test.ts (3 tests)
 
-Test Files  4 passed (4)
-     Tests  15 passed (15)
+Test Files  5 passed (5)
+     Tests  19 passed (19)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -47,6 +48,12 @@ Adicionalmente se prueba (más allá del mínimo pedido):
 - Impide despachar más cantidad que la disponible (existencias negativas).
 - Recepción parcial deja el saldo pendiente correctamente calculado en la orden de compra.
 - Login rechaza credenciales inválidas.
+- **Devoluciones (sección 9 del encargo — "no deben volver automáticamente al stock
+  disponible")**: una devolución recién ingresada aumenta el stock físico total pero no
+  el utilizable/disponible (`tests/devoluciones.test.ts`); resolverla como `BAJA` exige
+  motivo y evidencia cuando el motivo la requiere; resolverla como
+  `REINGRESO_DISPONIBLE` sí libera el stock; y quien registró la devolución no puede
+  resolverla (separación de funciones).
 
 ## Evidencia de la aplicación real (no solo servicios)
 

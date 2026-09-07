@@ -15,6 +15,7 @@ const RECURSOS_ACCIONES: [string, string[]][] = [
   ["reservas", ["consultar", "crear"]],
   ["despachos", ["consultar", "ejecutar"]],
   ["transferencias", ["consultar", "ejecutar"]],
+  ["devoluciones", ["consultar", "crear", "ejecutar"]],
   ["conteos", ["consultar", "crear", "ejecutar"]],
   ["ajustes", ["consultar", "crear", "aprobar"]],
   ["indicadores", ["consultar"]],
@@ -27,12 +28,12 @@ const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.acc
     permisos: [
       "productos.consultar", "bodegas.*", "ubicaciones.*", "cargas.consultar", "cargas.aprobar",
       "compras.consultar", "recepciones.*", "solicitudes_salida.*", "reservas.*", "despachos.*",
-      "transferencias.*", "conteos.*", "ajustes.consultar", "ajustes.aprobar", "indicadores.consultar",
+      "transferencias.*", "devoluciones.*", "conteos.*", "ajustes.consultar", "ajustes.aprobar", "indicadores.consultar",
     ],
   },
   operador: {
     nombre: "Operador de Bodega",
-    permisos: ["productos.consultar", "recepciones.crear", "reservas.crear", "despachos.ejecutar", "transferencias.ejecutar", "conteos.ejecutar", "indicadores.consultar"],
+    permisos: ["productos.consultar", "recepciones.crear", "reservas.crear", "despachos.ejecutar", "transferencias.ejecutar", "devoluciones.consultar", "devoluciones.crear", "conteos.ejecutar", "indicadores.consultar"],
   },
   compras: {
     nombre: "Compras",
@@ -224,6 +225,21 @@ async function main() {
     where: { empresaId_categoria_codigo: { empresaId: empresa.id, categoria: "AJUSTE", codigo: "ERROR_CONTEO" } },
     update: {},
     create: { empresaId: empresa.id, categoria: "AJUSTE", codigo: "ERROR_CONTEO", nombre: "Error de conteo anterior", requiereEvidencia: false },
+  });
+  await prisma.motivo.upsert({
+    where: { empresaId_categoria_codigo: { empresaId: empresa.id, categoria: "DEVOLUCION", codigo: "CLIENTE_RECHAZO" } },
+    update: {},
+    create: { empresaId: empresa.id, categoria: "DEVOLUCION", codigo: "CLIENTE_RECHAZO", nombre: "Rechazo del cliente", requiereEvidencia: false },
+  });
+  await prisma.motivo.upsert({
+    where: { empresaId_categoria_codigo: { empresaId: empresa.id, categoria: "DEVOLUCION", codigo: "PRODUCTO_DEFECTUOSO" } },
+    update: {},
+    create: { empresaId: empresa.id, categoria: "DEVOLUCION", codigo: "PRODUCTO_DEFECTUOSO", nombre: "Producto defectuoso", requiereEvidencia: true },
+  });
+  await prisma.motivo.upsert({
+    where: { empresaId_categoria_codigo: { empresaId: empresa.id, categoria: "BAJA", codigo: "DANO_IRREPARABLE" } },
+    update: {},
+    create: { empresaId: empresa.id, categoria: "BAJA", codigo: "DANO_IRREPARABLE", nombre: "Daño irreparable", requiereEvidencia: true },
   });
 
   console.log("Creando usuarios demo (contraseña: Demo1234!) ...");

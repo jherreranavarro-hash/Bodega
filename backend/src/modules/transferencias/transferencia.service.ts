@@ -1,17 +1,13 @@
 import { EstadoInventario, EstadoTransferencia, Prisma, TipoOperacion, TipoUbicacion } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { registrarMovimiento, crearOperacion } from "../inventario/inventario.service.js";
+import { obtenerUbicacionTecnica } from "../inventario/ubicaciones-tecnicas.js";
 import { ErrorValidacion } from "../../lib/errors.js";
 
 type Tx = Prisma.TransactionClient;
 
-/** Ubicación técnica de tránsito de una bodega (una por bodega, autoprovisionada). */
-async function obtenerUbicacionTransito(tx: Tx, bodegaId: string) {
-  const existente = await tx.ubicacion.findFirst({ where: { bodegaId, tipo: TipoUbicacion.TRANSITO } });
-  if (existente) return existente;
-  return tx.ubicacion.create({
-    data: { bodegaId, codigo: "TRANSITO", nombre: "Tránsito entre bodegas", tipo: TipoUbicacion.TRANSITO },
-  });
+function obtenerUbicacionTransito(tx: Tx, bodegaId: string) {
+  return obtenerUbicacionTecnica(tx, bodegaId, TipoUbicacion.TRANSITO, "TRANSITO", "Tránsito entre bodegas");
 }
 
 export interface LineaTransferencia {

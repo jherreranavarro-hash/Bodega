@@ -72,7 +72,7 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 | Solicitudes y reservas | Implementado | `modules/salidas` |
 | Preparación y despacho | Despacho implementado; preparación modelada en datos, sin flujo de UI propio | `modules/despachos` |
 | Transferencias | Implementado | `modules/transferencias` |
-| Devoluciones y excepciones | Modelo de datos completo; servicio de negocio pendiente | `prisma/schema.prisma` (Devolucion*) |
+| Devoluciones y excepciones | Implementado (ingreso a cuarentena → resolución reingreso/cuarentena/baja) | `modules/devoluciones` |
 | Conteos y ajustes | Implementado | `modules/ajustes` |
 | Inteligencia de inventario | Indicadores base implementados; pronósticos/escenarios/alertas automatizadas pendientes | `modules/indicadores` |
 | Reportes e integraciones | Exportación CSV de errores de carga; sin integraciones externas | `modules/cargas` |

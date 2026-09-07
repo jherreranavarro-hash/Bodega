@@ -9,6 +9,7 @@ import { Cargas } from "./pages/Cargas";
 import { Compras } from "./pages/Compras";
 import { Salidas } from "./pages/Salidas";
 import { Transferencias } from "./pages/Transferencias";
+import { Devoluciones } from "./pages/Devoluciones";
 import { Ajustes } from "./pages/Ajustes";
 
 function RutaProtegida({ children }: { children: React.ReactNode }) {
@@ -34,6 +35,7 @@ function Rutas() {
         <Route path="/compras" element={<Compras />} />
         <Route path="/salidas" element={<Salidas />} />
         <Route path="/transferencias" element={<Transferencias />} />
+        <Route path="/devoluciones" element={<Devoluciones />} />
         <Route path="/ajustes" element={<Ajustes />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -67,6 +67,19 @@ await paso("transferencias visible", async () => {
   await page.waitForSelector("text=Nueva transferencia");
 });
 
+const folioDev = `DEV-SMOKE-${Date.now()}`;
+await paso("registrar devolución real y verificar que no queda disponible", async () => {
+  await page.click('a:has-text("Devoluciones")');
+  await page.waitForSelector("text=Registrar ingreso de devolución");
+  await page.fill('form:has-text("Registrar ingreso de devolución") input:near(:text("Folio"))', folioDev);
+  await page.selectOption('form:has-text("Registrar ingreso de devolución") select >> nth=0', { label: "BOD-CENTRAL" });
+  await page.selectOption('form:has-text("Registrar ingreso de devolución") select >> nth=1', { label: "Rechazo del cliente" });
+  await page.selectOption('form:has-text("Registrar ingreso de devolución") select >> nth=2', { label: "PROD-001" });
+  await page.click('form:has-text("Registrar ingreso de devolución") button[type="submit"]');
+  await page.waitForSelector(`text=${folioDev}`, { timeout: 10000 });
+  await page.waitForSelector("text=PENDIENTE INSPECCION");
+});
+
 await paso("conteos y ajustes visible", async () => {
   await page.click('a:has-text("Conteos y Ajustes")');
   await page.waitForSelector("text=Planificar conteo cíclico");

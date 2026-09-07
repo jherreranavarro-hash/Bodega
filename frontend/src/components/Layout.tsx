@@ -9,6 +9,7 @@ const ENLACES = [
   { ruta: "/compras", etiqueta: "Compras y Recepción" },
   { ruta: "/salidas", etiqueta: "Solicitudes, Reservas y Despacho" },
   { ruta: "/transferencias", etiqueta: "Transferencias" },
+  { ruta: "/devoluciones", etiqueta: "Devoluciones" },
   { ruta: "/ajustes", etiqueta: "Conteos y Ajustes" },
 ];
 

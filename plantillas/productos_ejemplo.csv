@@ -1,0 +1,4 @@
+codigo,nombre,descripcion,codigo_barras,unidad_base_codigo,control_lote,control_serie,control_vencimiento,metodo_valorizacion
+PROD-100,Aceite de Oliva 500ml,Aceite de oliva extra virgen,7801234567890,UN,true,false,true,PROMEDIO_PONDERADO
+PROD-101,Detergente en polvo 3kg,,7801234567891,UN,false,false,false,PROMEDIO_PONDERADO
+PROD-102,Guantes de nitrilo (caja x100),,7801234567892,CJ,true,false,true,FIFO

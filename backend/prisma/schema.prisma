@@ -1,0 +1,1422 @@
+// ============================================================================
+// Sistema Integral de Bodega, Inventario y Toma de Decisiones
+// Modelo de datos (Prisma / PostgreSQL)
+//
+// Convenciones:
+//  - Toda tabla operativa referencia empresa_id (aislamiento multiempresa).
+//  - Los saldos de inventario NUNCA se editan directamente: se derivan de
+//    movimientos_inventario (tabla inmutable, solo INSERT) dentro de la
+//    misma transacción que crea la operación que los origina.
+//  - fechaEfectiva = fecha de negocio de la operación (puede ser pasada).
+//  - fechaRegistro = momento real en que el sistema recibió el dato (default now()).
+//  - Cantidades, costos y factores de conversión usan Decimal con precisión fija.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// 1. ADMINISTRACIÓN Y SEGURIDAD
+// ----------------------------------------------------------------------------
+
+model Empresa {
+  id            String   @id @default(uuid())
+  rut           String   @unique
+  razonSocial   String
+  nombreFantasia String?
+  moneda        String   @default("CLP")
+  zonaHoraria   String   @default("America/Santiago")
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  sucursales        Sucursal[]
+  bodegas           Bodega[]
+  usuarios          Usuario[]
+  productos         Producto[]
+  categorias        Categoria[]
+  marcas            Marca[]
+  unidadesMedida    UnidadMedida[]
+  proveedores       Proveedor[]
+  clientes          Cliente[]
+  transportistas    Transportista[]
+  areas             Area[]
+  centrosCosto      CentroCosto[]
+  motivos           Motivo[]
+  parametros        Parametro[]
+  cargasDatos       CargaDatos[]
+  plantillasCarga   PlantillaCarga[]
+  operaciones       OperacionInventario[]
+  ordenesCompra     OrdenCompra[]
+  solicitudesCompra SolicitudCompra[]
+  solicitudesSalida SolicitudSalida[]
+  auditoria         Auditoria[]
+  alertas           Alerta[]
+  aprobaciones      Aprobacion[]
+
+  @@map("empresas")
+}
+
+model Sucursal {
+  id        String   @id @default(uuid())
+  empresaId String   @map("empresa_id")
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  codigo    String
+  nombre    String
+  direccion String?
+  activo    Boolean  @default(true)
+  creadoEn  DateTime @default(now())
+
+  bodegas Bodega[]
+
+  @@unique([empresaId, codigo])
+  @@map("sucursales")
+}
+
+model Usuario {
+  id            String   @id @default(uuid())
+  empresaId     String   @map("empresa_id")
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  email         String   @unique
+  nombre        String
+  passwordHash  String
+  rolId         String   @map("rol_id")
+  rol           Rol      @relation(fields: [rolId], references: [id])
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  accesosBodega   AccesoBodega[]
+  auditoria       Auditoria[]
+  cargasCreadas   CargaDatos[]      @relation("cargaCreadaPor")
+  cargasAprobadas CargaDatos[]      @relation("cargaAprobadaPor")
+  aprobaciones    Aprobacion[]      @relation("aprobacionResuelvePor")
+  aprobacionesSol Aprobacion[]      @relation("aprobacionSolicitaPor")
+
+  @@map("usuarios")
+}
+
+model Rol {
+  id          String       @id @default(uuid())
+  codigo      String       @unique // administrador, jefe_bodega, operador, compras, solicitante, aprobador, auditor, gerencia
+  nombre      String
+  descripcion String?
+  usuarios    Usuario[]
+  permisos    RolPermiso[]
+
+  @@map("roles")
+}
+
+// Recurso + acción. Ej: (productos, crear), (ajustes, aprobar)
+model Permiso {
+  id       String       @id @default(uuid())
+  recurso  String
+  accion   String // consultar | crear | modificar | importar | aprobar | ejecutar | exportar
+  roles    RolPermiso[]
+
+  @@unique([recurso, accion])
+  @@map("permisos")
+}
+
+model RolPermiso {
+  rolId     String  @map("rol_id")
+  rol       Rol     @relation(fields: [rolId], references: [id])
+  permisoId String  @map("permiso_id")
+  permiso   Permiso @relation(fields: [permisoId], references: [id])
+
+  @@id([rolId, permisoId])
+  @@map("rol_permisos")
+}
+
+// Alcance de acceso de un usuario a una bodega específica (multi-bodega).
+model AccesoBodega {
+  id        String  @id @default(uuid())
+  usuarioId String  @map("usuario_id")
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+  bodegaId  String  @map("bodega_id")
+  bodega    Bodega  @relation(fields: [bodegaId], references: [id])
+
+  @@unique([usuarioId, bodegaId])
+  @@map("accesos_bodega")
+}
+
+// Configuración por empresa: aprobaciones requeridas, stock negativo permitido, etc.
+model Parametro {
+  id        String  @id @default(uuid())
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  clave     String
+  valor     String
+  descripcion String?
+
+  @@unique([empresaId, clave])
+  @@map("parametros")
+}
+
+model Auditoria {
+  id          String   @id @default(uuid())
+  empresaId   String   @map("empresa_id")
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  usuarioId   String?  @map("usuario_id")
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id])
+  accion      String // p.ej. "producto.crear", "ajuste.aprobar"
+  entidad     String // nombre de la tabla/entidad afectada
+  entidadId   String? @map("entidad_id")
+  resultado   String // OK | ERROR | DENEGADO
+  detalle     Json?
+  ip          String?
+  creadoEn    DateTime @default(now())
+
+  @@index([empresaId, entidad, entidadId])
+  @@map("auditoria")
+}
+
+// Solicitudes de autorización genéricas (ajustes sensibles, cargas de inventario inicial, etc.)
+model Aprobacion {
+  id             String    @id @default(uuid())
+  empresaId      String    @map("empresa_id")
+  empresa        Empresa   @relation(fields: [empresaId], references: [id])
+  tipo           String // carga_inventario_inicial | ajuste | orden_compra | solicitud_compra | anulacion
+  entidad        String
+  entidadId      String    @map("entidad_id")
+  estado         String    @default("PENDIENTE") // PENDIENTE | APROBADA | RECHAZADA
+  solicitadoPorId String   @map("solicitado_por_id")
+  solicitadoPor  Usuario   @relation("aprobacionSolicitaPor", fields: [solicitadoPorId], references: [id])
+  resueltoPorId  String?   @map("resuelto_por_id")
+  resueltoPor    Usuario?  @relation("aprobacionResuelvePor", fields: [resueltoPorId], references: [id])
+  comentario     String?
+  creadoEn       DateTime  @default(now())
+  resueltoEn     DateTime?
+
+  @@index([empresaId, entidad, entidadId])
+  @@map("aprobaciones")
+}
+
+model Adjunto {
+  id         String   @id @default(uuid())
+  entidad    String
+  entidadId  String   @map("entidad_id")
+  nombre     String
+  url        String
+  tipo       String?
+  creadoEn   DateTime @default(now())
+
+  @@index([entidad, entidadId])
+  @@map("adjuntos")
+}
+
+// ----------------------------------------------------------------------------
+// 2. ESTRUCTURA FÍSICA: BODEGAS Y UBICACIONES
+// ----------------------------------------------------------------------------
+
+enum TipoUbicacion {
+  RECEPCION
+  ALMACENAMIENTO
+  PREPARACION
+  DESPACHO
+  CUARENTENA
+  TRANSITO
+  DEVOLUCION
+}
+
+model Bodega {
+  id         String   @id @default(uuid())
+  empresaId  String   @map("empresa_id")
+  empresa    Empresa  @relation(fields: [empresaId], references: [id])
+  sucursalId String?  @map("sucursal_id")
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+  codigo     String
+  nombre     String
+  activo     Boolean  @default(true)
+  creadoEn   DateTime @default(now())
+
+  ubicaciones         Ubicacion[]
+  accesos             AccesoBodega[]
+  parametrosReposicion ParametroReposicion[]
+  productosPermitidos ProductoUbicacionPermitida[]
+  operaciones         OperacionInventario[]
+  recepciones         Recepcion[]
+  despachos           Despacho[]
+  solicitudesSalida   SolicitudSalida[]
+  conteos             Conteo[]
+  ajustes             Ajuste[]
+  transferenciasOrigen  Transferencia[] @relation("transferenciaOrigen")
+  transferenciasDestino Transferencia[] @relation("transferenciaDestino")
+
+  @@unique([empresaId, codigo])
+  @@map("bodegas")
+}
+
+model Ubicacion {
+  id          String        @id @default(uuid())
+  bodegaId    String        @map("bodega_id")
+  bodega      Bodega        @relation(fields: [bodegaId], references: [id])
+  codigo      String
+  nombre      String
+  tipo        TipoUbicacion
+  zona        String?
+  pasillo     String?
+  estanteria  String?
+  nivel       String?
+  restricciones Json? // p.ej. { requiereFrio: true, pesoMaximoKg: 500 }
+  activo      Boolean       @default(true)
+  creadoEn    DateTime      @default(now())
+
+  saldos              SaldoInventario[]
+  movimientosOrigen   MovimientoInventario[] @relation("movUbicacionOrigen")
+  movimientosDestino  MovimientoInventario[] @relation("movUbicacionDestino")
+  productosPermitidos ProductoUbicacionPermitida[]
+
+  @@unique([bodegaId, codigo])
+  @@map("ubicaciones")
+}
+
+// ----------------------------------------------------------------------------
+// 3. PRODUCTOS Y CLASIFICACIÓN
+// ----------------------------------------------------------------------------
+
+model Categoria {
+  id           String     @id @default(uuid())
+  empresaId    String     @map("empresa_id")
+  empresa      Empresa    @relation(fields: [empresaId], references: [id])
+  codigo       String
+  nombre       String
+  categoriaPadreId String? @map("categoria_padre_id")
+  categoriaPadre Categoria? @relation("categoriaJerarquia", fields: [categoriaPadreId], references: [id])
+  subcategorias  Categoria[] @relation("categoriaJerarquia")
+  activo       Boolean    @default(true)
+
+  productos Producto[]
+
+  @@unique([empresaId, codigo])
+  @@map("categorias")
+}
+
+model Marca {
+  id        String   @id @default(uuid())
+  empresaId String   @map("empresa_id")
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  codigo    String
+  nombre    String
+  activo    Boolean  @default(true)
+
+  productos Producto[]
+
+  @@unique([empresaId, codigo])
+  @@map("marcas")
+}
+
+model UnidadMedida {
+  id        String  @id @default(uuid())
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  codigo    String // UN, KG, CJ, LT...
+  nombre    String
+  activo    Boolean @default(true)
+
+  productosBase        Producto[]              @relation("unidadBase")
+  conversiones         ConversionProducto[]
+  productoProveedores  ProductoProveedor[]
+
+  @@unique([empresaId, codigo])
+  @@map("unidades_medida")
+}
+
+enum MetodoValorizacion {
+  PROMEDIO_PONDERADO
+  FIFO
+}
+
+model Producto {
+  id                    String    @id @default(uuid())
+  empresaId             String    @map("empresa_id")
+  empresa               Empresa   @relation(fields: [empresaId], references: [id])
+  codigo                String // código interno único por empresa
+  nombre                String
+  descripcion           String?
+  codigoBarras          String?
+  categoriaId           String?   @map("categoria_id")
+  categoria             Categoria? @relation(fields: [categoriaId], references: [id])
+  marcaId               String?   @map("marca_id")
+  marca                 Marca?    @relation(fields: [marcaId], references: [id])
+  atributos             Json? // atributos configurables
+
+  unidadBaseId          String    @map("unidad_base_id")
+  unidadBase            UnidadMedida @relation("unidadBase", fields: [unidadBaseId], references: [id])
+  pesoKg                Decimal?  @db.Decimal(14, 4)
+  largoCm               Decimal?  @db.Decimal(10, 2)
+  anchoCm               Decimal?  @db.Decimal(10, 2)
+  altoCm                Decimal?  @db.Decimal(10, 2)
+
+  controlLote           Boolean   @default(false) @map("control_lote")
+  controlSerie          Boolean   @default(false) @map("control_serie")
+  controlVencimiento    Boolean   @default(false) @map("control_vencimiento")
+  vidaUtilMinimaDias    Int?      @map("vida_util_minima_dias")
+
+  metodoValorizacion    MetodoValorizacion @default(PROMEDIO_PONDERADO) @map("metodo_valorizacion")
+  moneda                String    @default("CLP")
+
+  cantidadMinimaCompra  Decimal?  @db.Decimal(14, 4) @map("cantidad_minima_compra")
+  multiploPedido        Decimal?  @db.Decimal(14, 4) @map("multiplo_pedido")
+  plazoReposicionDias   Int?      @map("plazo_reposicion_dias")
+
+  activo                Boolean   @default(true)
+  creadoEn              DateTime  @default(now())
+  actualizadoEn         DateTime  @updatedAt
+  creadoPorId           String?   @map("creado_por_id")
+  actualizadoPorId      String?   @map("actualizado_por_id")
+
+  conversiones          ConversionProducto[]
+  proveedores           ProductoProveedor[]
+  ubicacionesPermitidas ProductoUbicacionPermitida[]
+  parametrosReposicion  ParametroReposicion[]
+  lotes                 Lote[]
+  series                Serie[]
+  saldos                SaldoInventario[]
+  movimientos           MovimientoInventario[]
+  capasCosto            CapaCosto[]
+  demandaRegistrada     DemandaRegistrada[]
+  pronosticos           Pronostico[]
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId, codigoBarras])
+  @@map("productos")
+}
+
+// Ubicaciones habilitadas específicas para un producto (restricciones de almacenamiento).
+model ProductoUbicacionPermitida {
+  id          String    @id @default(uuid())
+  productoId  String    @map("producto_id")
+  producto    Producto  @relation(fields: [productoId], references: [id])
+  bodegaId    String    @map("bodega_id")
+  bodega      Bodega    @relation(fields: [bodegaId], references: [id])
+  ubicacionId String?   @map("ubicacion_id")
+  ubicacion   Ubicacion? @relation(fields: [ubicacionId], references: [id])
+
+  @@unique([productoId, bodegaId, ubicacionId])
+  @@map("productos_ubicaciones_permitidas")
+}
+
+// Factor de conversión vigente en el tiempo. No se sobreescribe: se versiona.
+model ConversionProducto {
+  id            String       @id @default(uuid())
+  productoId    String       @map("producto_id")
+  producto      Producto     @relation(fields: [productoId], references: [id])
+  unidadId      String       @map("unidad_id")
+  unidad        UnidadMedida @relation(fields: [unidadId], references: [id])
+  factorAUnidadBase Decimal  @db.Decimal(18, 6) @map("factor_a_unidad_base")
+  tipoUso       String // COMPRA | DESPACHO | AMBOS
+  vigenteDesde  DateTime     @default(now()) @map("vigente_desde")
+  vigenteHasta  DateTime?    @map("vigente_hasta")
+
+  @@index([productoId, unidadId])
+  @@map("conversiones_producto")
+}
+
+// Parámetros de reposición por PRODUCTO + BODEGA (no solo por producto).
+model ParametroReposicion {
+  id                  String   @id @default(uuid())
+  productoId          String   @map("producto_id")
+  producto            Producto @relation(fields: [productoId], references: [id])
+  bodegaId            String   @map("bodega_id")
+  bodega              Bodega   @relation(fields: [bodegaId], references: [id])
+  stockMinimo         Decimal  @db.Decimal(14, 4) @map("stock_minimo")
+  stockMaximo         Decimal? @db.Decimal(14, 4) @map("stock_maximo")
+  stockSeguridad      Decimal  @default(0) @db.Decimal(14, 4) @map("stock_seguridad")
+  plazoReposicionDias Int      @map("plazo_reposicion_dias")
+  demandaDiariaEstimada Decimal? @db.Decimal(14, 4) @map("demanda_diaria_estimada")
+  activo              Boolean  @default(true)
+  actualizadoEn       DateTime @updatedAt
+
+  @@unique([productoId, bodegaId])
+  @@map("parametros_reposicion")
+}
+
+// ----------------------------------------------------------------------------
+// 4. CONTRAPARTES
+// ----------------------------------------------------------------------------
+
+model Proveedor {
+  id        String   @id @default(uuid())
+  empresaId String   @map("empresa_id")
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  codigo    String
+  razonSocial String
+  rut       String?
+  email     String?
+  telefono  String?
+  activo    Boolean  @default(true)
+  creadoEn  DateTime @default(now())
+
+  productos      ProductoProveedor[]
+  ordenesCompra  OrdenCompra[]
+  solicitudesCompra SolicitudCompra[]
+
+  @@unique([empresaId, codigo])
+  @@map("proveedores")
+}
+
+model ProductoProveedor {
+  id                String       @id @default(uuid())
+  productoId        String       @map("producto_id")
+  producto          Producto     @relation(fields: [productoId], references: [id])
+  proveedorId       String       @map("proveedor_id")
+  proveedor         Proveedor    @relation(fields: [proveedorId], references: [id])
+  codigoProveedor   String?      @map("codigo_proveedor")
+  unidadCompraId    String?      @map("unidad_compra_id")
+  unidadCompra      UnidadMedida? @relation(fields: [unidadCompraId], references: [id])
+  plazoEntregaDias  Int?         @map("plazo_entrega_dias")
+  costoReferencia   Decimal?     @db.Decimal(18, 4) @map("costo_referencia")
+  esPreferente      Boolean      @default(false) @map("es_preferente")
+  activo            Boolean      @default(true)
+
+  @@unique([productoId, proveedorId])
+  @@map("productos_proveedores")
+}
+
+model Cliente {
+  id        String   @id @default(uuid())
+  empresaId String   @map("empresa_id")
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  codigo    String
+  razonSocial String
+  rut       String?
+  activo    Boolean  @default(true)
+
+  despachos Despacho[]
+
+  @@unique([empresaId, codigo])
+  @@map("clientes")
+}
+
+model Transportista {
+  id        String  @id @default(uuid())
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  codigo    String
+  nombre    String
+  activo    Boolean @default(true)
+
+  despachos      Despacho[]
+  transferencias Transferencia[]
+
+  @@unique([empresaId, codigo])
+  @@map("transportistas")
+}
+
+model Area {
+  id        String  @id @default(uuid())
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  codigo    String
+  nombre    String
+  activo    Boolean @default(true)
+
+  solicitudesSalida SolicitudSalida[]
+
+  @@unique([empresaId, codigo])
+  @@map("areas")
+}
+
+model CentroCosto {
+  id        String  @id @default(uuid())
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  codigo    String
+  nombre    String
+  activo    Boolean @default(true)
+
+  solicitudesSalida SolicitudSalida[]
+
+  @@unique([empresaId, codigo])
+  @@map("centros_costo")
+}
+
+// Motivos configurables para movimientos, ajustes, devoluciones y bajas.
+model Motivo {
+  id        String  @id @default(uuid())
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  categoria String // AJUSTE | DEVOLUCION | BAJA | BLOQUEO
+  codigo    String
+  nombre    String
+  requiereEvidencia Boolean @default(false) @map("requiere_evidencia")
+  activo    Boolean @default(true)
+
+  @@unique([empresaId, categoria, codigo])
+  @@map("motivos")
+}
+
+// ----------------------------------------------------------------------------
+// 5. TRAZABILIDAD: LOTES Y SERIES
+// ----------------------------------------------------------------------------
+
+model Lote {
+  id             String    @id @default(uuid())
+  productoId     String    @map("producto_id")
+  producto       Producto  @relation(fields: [productoId], references: [id])
+  codigoLote     String    @map("codigo_lote")
+  fechaFabricacion DateTime? @map("fecha_fabricacion")
+  fechaVencimiento DateTime? @map("fecha_vencimiento")
+  bloqueado      Boolean   @default(false)
+  creadoEn       DateTime  @default(now())
+
+  saldos      SaldoInventario[]
+  movimientos MovimientoInventario[]
+  capasCosto  CapaCosto[]
+
+  @@unique([productoId, codigoLote])
+  @@index([productoId, fechaVencimiento])
+  @@map("lotes")
+}
+
+model Serie {
+  id           String    @id @default(uuid())
+  productoId   String    @map("producto_id")
+  producto     Producto  @relation(fields: [productoId], references: [id])
+  numeroSerie  String    @map("numero_serie")
+  estado       String    @default("DISPONIBLE") // DISPONIBLE | RESERVADA | DESPACHADA | BLOQUEADA | BAJA
+  creadoEn     DateTime  @default(now())
+
+  saldos      SaldoInventario[]
+  movimientos MovimientoInventario[]
+
+  @@unique([productoId, numeroSerie])
+  @@map("series")
+}
+
+// ----------------------------------------------------------------------------
+// 6. NÚCLEO DE INVENTARIO (INMUTABLE + DERIVADO)
+// ----------------------------------------------------------------------------
+
+enum TipoOperacion {
+  RECEPCION
+  DESPACHO
+  TRANSFERENCIA_SALIDA
+  TRANSFERENCIA_ENTRADA
+  RESERVA
+  LIBERACION_RESERVA
+  DEVOLUCION
+  AJUSTE
+  BAJA
+  APERTURA_INICIAL
+  RECLASIFICACION
+}
+
+enum EstadoOperacion {
+  BORRADOR
+  PENDIENTE_APROBACION
+  APROBADA
+  CONTABILIZADA
+  RECHAZADA
+  ANULADA
+}
+
+enum EstadoInventario {
+  DISPONIBLE
+  CUARENTENA
+  BLOQUEADO
+  TRANSITO
+  DANADO
+  VENCIDO
+}
+
+// Encabezado común de cualquier operación que pueda impactar inventario.
+// Documento fuente y estado de autorización viven aquí; el detalle
+// específico de cada proceso vive en su propia tabla (Recepcion, Despacho...).
+model OperacionInventario {
+  id              String          @id @default(uuid())
+  empresaId       String          @map("empresa_id")
+  empresa         Empresa         @relation(fields: [empresaId], references: [id])
+  bodegaId        String          @map("bodega_id")
+  bodega          Bodega          @relation(fields: [bodegaId], references: [id])
+  tipo            TipoOperacion
+  estado          EstadoOperacion @default(BORRADOR)
+  documentoOrigen String?         @map("documento_origen") // p.ej. "RECEPCION-000123"
+  fechaEfectiva   DateTime        @map("fecha_efectiva")
+  fechaRegistro   DateTime        @default(now()) @map("fecha_registro")
+  usuarioId       String          @map("usuario_id")
+  autorizadoPorId String?         @map("autorizado_por_id")
+  operacionOrigenId String?       @map("operacion_origen_id") // para compensaciones
+  operacionOrigen OperacionInventario? @relation("compensacion", fields: [operacionOrigenId], references: [id])
+  compensaciones  OperacionInventario[] @relation("compensacion")
+  observacion     String?
+
+  movimientos MovimientoInventario[]
+
+  @@index([empresaId, bodegaId, tipo, estado])
+  @@map("operaciones_inventario")
+}
+
+// Registro INMUTABLE de todo aumento/disminución/reclasificación de inventario.
+// Nunca se actualiza ni se borra: una corrección crea un nuevo movimiento.
+model MovimientoInventario {
+  id                String            @id @default(uuid())
+  operacionId       String            @map("operacion_id")
+  operacion         OperacionInventario @relation(fields: [operacionId], references: [id])
+  productoId        String            @map("producto_id")
+  producto          Producto          @relation(fields: [productoId], references: [id])
+  ubicacionOrigenId String?           @map("ubicacion_origen_id")
+  ubicacionOrigen   Ubicacion?        @relation("movUbicacionOrigen", fields: [ubicacionOrigenId], references: [id])
+  ubicacionDestinoId String?          @map("ubicacion_destino_id")
+  ubicacionDestino  Ubicacion?        @relation("movUbicacionDestino", fields: [ubicacionDestinoId], references: [id])
+  loteId            String?           @map("lote_id")
+  lote              Lote?             @relation(fields: [loteId], references: [id])
+  serieId           String?           @map("serie_id")
+  serie             Serie?            @relation(fields: [serieId], references: [id])
+  estadoInventario  EstadoInventario  @default(DISPONIBLE) @map("estado_inventario")
+  cantidad          Decimal           @db.Decimal(18, 6) // firmada: + entra, - sale (en unidad base)
+  costoUnitario     Decimal?          @db.Decimal(18, 6) @map("costo_unitario")
+  fechaEfectiva     DateTime          @map("fecha_efectiva")
+  creadoEn          DateTime          @default(now())
+
+  @@index([productoId, ubicacionDestinoId, loteId, serieId])
+  @@index([productoId, ubicacionOrigenId, loteId, serieId])
+  @@map("movimientos_inventario")
+}
+
+// Saldo derivado y reconstruible desde movimientos_inventario. Actualizado
+// transaccionalmente junto al movimiento que lo origina; sirve como
+// proyección de lectura rápida, nunca como fuente de verdad.
+model SaldoInventario {
+  id               String           @id @default(uuid())
+  productoId       String           @map("producto_id")
+  producto         Producto         @relation(fields: [productoId], references: [id])
+  ubicacionId      String           @map("ubicacion_id")
+  ubicacion        Ubicacion        @relation(fields: [ubicacionId], references: [id])
+  loteId           String?          @map("lote_id")
+  lote             Lote?            @relation(fields: [loteId], references: [id])
+  serieId          String?          @map("serie_id")
+  serie            Serie?           @relation(fields: [serieId], references: [id])
+  estadoInventario EstadoInventario @default(DISPONIBLE) @map("estado_inventario")
+  cantidadFisica   Decimal          @default(0) @db.Decimal(18, 6) @map("cantidad_fisica")
+  actualizadoEn    DateTime         @updatedAt
+
+  reservasDetalle ReservaDetalle[]
+
+  // Clave de negocio: una combinación producto+ubicación+lote+serie+estado
+  // debe tener un único saldo. Postgres trata NULL como distinto en UNIQUE,
+  // por eso lote_id/serie_id usan '' como "sin lote/serie" a nivel de servicio
+  // (ver inventario.service) en lugar de NULL, evitando saldos duplicados.
+  @@unique([productoId, ubicacionId, loteId, serieId, estadoInventario])
+  @@map("saldos_inventario")
+}
+
+// ----------------------------------------------------------------------------
+// 7. COSTOS Y VALORIZACIÓN (FIFO)
+// ----------------------------------------------------------------------------
+
+model CapaCosto {
+  id             String   @id @default(uuid())
+  productoId     String   @map("producto_id")
+  producto       Producto @relation(fields: [productoId], references: [id])
+  loteId         String?  @map("lote_id")
+  lote           Lote?    @relation(fields: [loteId], references: [id])
+  costoUnitario  Decimal  @db.Decimal(18, 6) @map("costo_unitario")
+  cantidadOriginal Decimal @db.Decimal(18, 6) @map("cantidad_original")
+  cantidadDisponible Decimal @db.Decimal(18, 6) @map("cantidad_disponible")
+  moneda         String   @default("CLP")
+  tipoCambio     Decimal? @db.Decimal(18, 6) @map("tipo_cambio")
+  fuenteTipo     String   @map("fuente_tipo") // RECEPCION | AJUSTE | APERTURA_INICIAL
+  fuenteId       String   @map("fuente_id")
+  creadoEn       DateTime @default(now())
+
+  aplicaciones AplicacionCosto[]
+
+  @@index([productoId, creadoEn])
+  @@map("capas_costo")
+}
+
+model AplicacionCosto {
+  id             String    @id @default(uuid())
+  capaCostoId    String    @map("capa_costo_id")
+  capaCosto      CapaCosto @relation(fields: [capaCostoId], references: [id])
+  movimientoId   String    @map("movimiento_id")
+  cantidadAplicada Decimal @db.Decimal(18, 6) @map("cantidad_aplicada")
+  costoUnitario  Decimal   @db.Decimal(18, 6) @map("costo_unitario")
+  creadoEn       DateTime  @default(now())
+
+  @@map("aplicaciones_costo")
+}
+
+// ----------------------------------------------------------------------------
+// 8. COMPRAS
+// ----------------------------------------------------------------------------
+
+enum EstadoDocumentoCompra {
+  BORRADOR
+  PENDIENTE_APROBACION
+  APROBADA
+  RECHAZADA
+  ENVIADA
+  RECEPCION_PARCIAL
+  RECIBIDA_TOTAL
+  CANCELADA
+}
+
+model SolicitudCompra {
+  id           String                @id @default(uuid())
+  empresaId    String                @map("empresa_id")
+  empresa      Empresa               @relation(fields: [empresaId], references: [id])
+  folio        String
+  proveedorSugeridoId String?        @map("proveedor_sugerido_id")
+  proveedorSugerido Proveedor?       @relation(fields: [proveedorSugeridoId], references: [id])
+  estado       EstadoDocumentoCompra @default(BORRADOR)
+  origen       String                @default("MANUAL") // MANUAL | ALERTA_REPOSICION
+  solicitanteId String               @map("solicitante_id")
+  creadoEn     DateTime              @default(now())
+
+  detalle       SolicitudCompraDetalle[]
+  ordenesCompra OrdenCompra[]
+
+  @@unique([empresaId, folio])
+  @@map("solicitudes_compra")
+}
+
+model SolicitudCompraDetalle {
+  id            String          @id @default(uuid())
+  solicitudId   String          @map("solicitud_id")
+  solicitud     SolicitudCompra @relation(fields: [solicitudId], references: [id])
+  productoId    String          @map("producto_id")
+  cantidad      Decimal         @db.Decimal(18, 6)
+  unidadId      String          @map("unidad_id")
+  bodegaDestinoId String        @map("bodega_destino_id")
+  fechaRequerida DateTime?      @map("fecha_requerida")
+
+  @@map("solicitudes_compra_detalle")
+}
+
+model OrdenCompra {
+  id            String                @id @default(uuid())
+  empresaId     String                @map("empresa_id")
+  empresa       Empresa               @relation(fields: [empresaId], references: [id])
+  folio         String
+  proveedorId   String                @map("proveedor_id")
+  proveedor     Proveedor             @relation(fields: [proveedorId], references: [id])
+  solicitudCompraId String?           @map("solicitud_compra_id")
+  solicitudCompra SolicitudCompra?    @relation(fields: [solicitudCompraId], references: [id])
+  estado        EstadoDocumentoCompra @default(BORRADOR)
+  moneda        String                @default("CLP")
+  fechaEmision  DateTime              @default(now()) @map("fecha_emision")
+  fechaCompromisoOriginal DateTime?   @map("fecha_compromiso_original")
+  fechaCompromisoActual   DateTime?   @map("fecha_compromiso_actual")
+  aprobadaPorId String?               @map("aprobada_por_id")
+  creadoEn      DateTime              @default(now())
+
+  detalle     OrdenCompraDetalle[]
+  recepciones Recepcion[]
+
+  @@unique([empresaId, folio])
+  @@map("ordenes_compra")
+}
+
+model OrdenCompraDetalle {
+  id              String       @id @default(uuid())
+  ordenCompraId   String       @map("orden_compra_id")
+  ordenCompra     OrdenCompra  @relation(fields: [ordenCompraId], references: [id])
+  productoId      String       @map("producto_id")
+  unidadId        String       @map("unidad_id")
+  cantidadPedida  Decimal      @db.Decimal(18, 6) @map("cantidad_pedida")
+  cantidadRecibida Decimal     @default(0) @db.Decimal(18, 6) @map("cantidad_recibida")
+  cantidadRechazada Decimal    @default(0) @db.Decimal(18, 6) @map("cantidad_rechazada")
+  costoUnitarioPactado Decimal @db.Decimal(18, 6) @map("costo_unitario_pactado")
+
+  recepcionesDetalle RecepcionDetalle[]
+
+  @@map("ordenes_compra_detalle")
+}
+
+// ----------------------------------------------------------------------------
+// 9. RECEPCIÓN
+// ----------------------------------------------------------------------------
+
+enum EstadoRecepcion {
+  BORRADOR
+  EN_INSPECCION
+  CONTABILIZADA
+  ANULADA
+}
+
+model Recepcion {
+  id            String          @id @default(uuid())
+  folio         String
+  ordenCompraId String?         @map("orden_compra_id")
+  ordenCompra   OrdenCompra?    @relation(fields: [ordenCompraId], references: [id])
+  bodegaId      String          @map("bodega_id")
+  bodega        Bodega          @relation(fields: [bodegaId], references: [id])
+  estado        EstadoRecepcion @default(BORRADOR)
+  fechaEfectiva DateTime        @map("fecha_efectiva")
+  usuarioId     String          @map("usuario_id")
+  operacionId   String?         @map("operacion_id")
+  creadoEn      DateTime        @default(now())
+
+  detalle RecepcionDetalle[]
+
+  @@unique([bodegaId, folio])
+  @@map("recepciones")
+}
+
+model RecepcionDetalle {
+  id                  String       @id @default(uuid())
+  recepcionId         String       @map("recepcion_id")
+  recepcion           Recepcion    @relation(fields: [recepcionId], references: [id])
+  ordenCompraDetalleId String?     @map("orden_compra_detalle_id")
+  ordenCompraDetalle  OrdenCompraDetalle? @relation(fields: [ordenCompraDetalleId], references: [id])
+  productoId          String       @map("producto_id")
+  ubicacionDestinoId  String       @map("ubicacion_destino_id")
+  loteCodigo          String?      @map("lote_codigo")
+  fechaVencimiento    DateTime?    @map("fecha_vencimiento")
+  cantidadRecibida    Decimal      @db.Decimal(18, 6) @map("cantidad_recibida")
+  cantidadAceptada    Decimal      @db.Decimal(18, 6) @map("cantidad_aceptada")
+  cantidadRechazada   Decimal      @default(0) @db.Decimal(18, 6) @map("cantidad_rechazada")
+  costoUnitario       Decimal      @db.Decimal(18, 6) @map("costo_unitario")
+  motivoRechazoId     String?      @map("motivo_rechazo_id")
+
+  @@map("recepciones_detalle")
+}
+
+// ----------------------------------------------------------------------------
+// 10. SOLICITUDES DE SALIDA Y RESERVAS
+// ----------------------------------------------------------------------------
+
+enum EstadoSolicitudSalida {
+  BORRADOR
+  APROBADA
+  EN_PREPARACION
+  DESPACHADA_PARCIAL
+  DESPACHADA_TOTAL
+  CANCELADA
+}
+
+model SolicitudSalida {
+  id            String                @id @default(uuid())
+  empresaId     String                @map("empresa_id")
+  empresa       Empresa               @relation(fields: [empresaId], references: [id])
+  folio         String
+  bodegaId      String                @map("bodega_id")
+  bodega        Bodega                @relation(fields: [bodegaId], references: [id])
+  tipoDestino   String // AREA_INTERNA | CLIENTE
+  areaId        String?               @map("area_id")
+  area          Area?                 @relation(fields: [areaId], references: [id])
+  centroCostoId String?               @map("centro_costo_id")
+  centroCosto   CentroCosto?          @relation(fields: [centroCostoId], references: [id])
+  clienteId     String?               @map("cliente_id")
+  prioridad     String                @default("NORMAL") // ALTA | NORMAL | BAJA
+  fechaRequerida DateTime?            @map("fecha_requerida")
+  estado        EstadoSolicitudSalida @default(BORRADOR)
+  solicitanteId String                @map("solicitante_id")
+  creadoEn      DateTime              @default(now())
+
+  detalle       SolicitudSalidaDetalle[]
+  reservas      Reserva[]
+  preparaciones Preparacion[]
+
+  @@unique([empresaId, folio])
+  @@map("solicitudes_salida")
+}
+
+model SolicitudSalidaDetalle {
+  id                String           @id @default(uuid())
+  solicitudId       String           @map("solicitud_id")
+  solicitud         SolicitudSalida  @relation(fields: [solicitudId], references: [id])
+  productoId        String           @map("producto_id")
+  cantidadSolicitada Decimal         @db.Decimal(18, 6) @map("cantidad_solicitada")
+  cantidadAtendida  Decimal          @default(0) @db.Decimal(18, 6) @map("cantidad_atendida")
+  cantidadCancelada Decimal          @default(0) @db.Decimal(18, 6) @map("cantidad_cancelada")
+  motivoNoAtencion  String?          @map("motivo_no_atencion")
+
+  reservasDetalle Reserva[]
+
+  @@map("solicitudes_salida_detalle")
+}
+
+enum EstadoReserva {
+  ACTIVA
+  CONSUMIDA_PARCIAL
+  CONSUMIDA_TOTAL
+  LIBERADA
+  VENCIDA
+}
+
+model Reserva {
+  id                String           @id @default(uuid())
+  solicitudId       String           @map("solicitud_id")
+  solicitud         SolicitudSalida  @relation(fields: [solicitudId], references: [id])
+  solicitudDetalleId String          @map("solicitud_detalle_id")
+  solicitudDetalle  SolicitudSalidaDetalle @relation(fields: [solicitudDetalleId], references: [id])
+  productoId        String           @map("producto_id")
+  cantidad          Decimal          @db.Decimal(18, 6)
+  estado            EstadoReserva    @default(ACTIVA)
+  fechaVencimiento  DateTime?        @map("fecha_vencimiento")
+  creadoEn          DateTime         @default(now())
+
+  detalle ReservaDetalle[]
+
+  @@map("reservas")
+}
+
+// Cantidad reservada imputada a un saldo (ubicación/lote/serie) específico.
+model ReservaDetalle {
+  id               String          @id @default(uuid())
+  reservaId        String          @map("reserva_id")
+  reserva          Reserva         @relation(fields: [reservaId], references: [id])
+  saldoId          String          @map("saldo_id")
+  saldo            SaldoInventario @relation(fields: [saldoId], references: [id])
+  cantidad         Decimal         @db.Decimal(18, 6)
+  cantidadConsumida Decimal        @default(0) @db.Decimal(18, 6) @map("cantidad_consumida")
+
+  @@map("reservas_detalle")
+}
+
+// ----------------------------------------------------------------------------
+// 11. PREPARACIÓN Y DESPACHO
+// ----------------------------------------------------------------------------
+
+enum EstadoPreparacion {
+  PENDIENTE
+  EN_PROCESO
+  LISTA
+  ANULADA
+}
+
+model Preparacion {
+  id            String            @id @default(uuid())
+  folio         String
+  solicitudId   String            @map("solicitud_id")
+  solicitud     SolicitudSalida   @relation(fields: [solicitudId], references: [id])
+  estado        EstadoPreparacion @default(PENDIENTE)
+  responsableId String            @map("responsable_id")
+  creadoEn      DateTime          @default(now())
+
+  detalle   PreparacionDetalle[]
+  despachos Despacho[]
+
+  @@map("preparaciones")
+}
+
+model PreparacionDetalle {
+  id               String      @id @default(uuid())
+  preparacionId    String      @map("preparacion_id")
+  preparacion      Preparacion @relation(fields: [preparacionId], references: [id])
+  productoId       String      @map("producto_id")
+  cantidadSolicitada Decimal   @db.Decimal(18, 6) @map("cantidad_solicitada")
+  cantidadVerificada Decimal   @default(0) @db.Decimal(18, 6) @map("cantidad_verificada")
+
+  @@map("preparaciones_detalle")
+}
+
+enum EstadoDespacho {
+  BORRADOR
+  CONTABILIZADO
+  ANULADO
+}
+
+model Despacho {
+  id              String          @id @default(uuid())
+  folio           String
+  bodegaId        String          @map("bodega_id")
+  bodega          Bodega          @relation(fields: [bodegaId], references: [id])
+  preparacionId   String?         @map("preparacion_id")
+  preparacion     Preparacion?    @relation(fields: [preparacionId], references: [id])
+  clienteId       String?         @map("cliente_id")
+  cliente         Cliente?        @relation(fields: [clienteId], references: [id])
+  transportistaId String?         @map("transportista_id")
+  transportista   Transportista?  @relation(fields: [transportistaId], references: [id])
+  referenciaComercial String?     @map("referencia_comercial")
+  estado          EstadoDespacho  @default(BORRADOR)
+  fechaEfectiva   DateTime        @map("fecha_efectiva")
+  usuarioId       String          @map("usuario_id")
+  operacionId     String?         @map("operacion_id")
+  evidenciaUrl    String?         @map("evidencia_url")
+  creadoEn        DateTime        @default(now())
+
+  detalle DespachoDetalle[]
+
+  @@unique([bodegaId, folio])
+  @@map("despachos")
+}
+
+model DespachoDetalle {
+  id              String   @id @default(uuid())
+  despachoId      String   @map("despacho_id")
+  despacho        Despacho @relation(fields: [despachoId], references: [id])
+  productoId      String   @map("producto_id")
+  reservaDetalleId String? @map("reserva_detalle_id")
+  ubicacionOrigenId String @map("ubicacion_origen_id")
+  loteId          String?  @map("lote_id")
+  serieId         String?  @map("serie_id")
+  cantidad        Decimal  @db.Decimal(18, 6)
+
+  @@map("despachos_detalle")
+}
+
+// ----------------------------------------------------------------------------
+// 12. TRANSFERENCIAS
+// ----------------------------------------------------------------------------
+
+enum EstadoTransferencia {
+  BORRADOR
+  EN_TRANSITO
+  RECIBIDA_PARCIAL
+  RECIBIDA_TOTAL
+  ANULADA
+}
+
+model Transferencia {
+  id              String              @id @default(uuid())
+  folio           String
+  bodegaOrigenId  String              @map("bodega_origen_id")
+  bodegaOrigen    Bodega              @relation("transferenciaOrigen", fields: [bodegaOrigenId], references: [id])
+  bodegaDestinoId String              @map("bodega_destino_id")
+  bodegaDestino   Bodega              @relation("transferenciaDestino", fields: [bodegaDestinoId], references: [id])
+  transportistaId String?             @map("transportista_id")
+  transportista   Transportista?      @relation(fields: [transportistaId], references: [id])
+  estado          EstadoTransferencia @default(BORRADOR)
+  fechaDespacho   DateTime?           @map("fecha_despacho")
+  fechaRecepcion  DateTime?           @map("fecha_recepcion")
+  usuarioId       String              @map("usuario_id")
+  operacionSalidaId  String?          @map("operacion_salida_id")
+  operacionEntradaId String?          @map("operacion_entrada_id")
+  creadoEn        DateTime            @default(now())
+
+  detalle TransferenciaDetalle[]
+
+  @@unique([bodegaOrigenId, folio])
+  @@map("transferencias")
+}
+
+model TransferenciaDetalle {
+  id                String        @id @default(uuid())
+  transferenciaId   String        @map("transferencia_id")
+  transferencia     Transferencia @relation(fields: [transferenciaId], references: [id])
+  productoId        String        @map("producto_id")
+  loteId            String?       @map("lote_id")
+  serieId           String?       @map("serie_id")
+  cantidadEnviada   Decimal       @db.Decimal(18, 6) @map("cantidad_enviada")
+  cantidadRecibida  Decimal       @default(0) @db.Decimal(18, 6) @map("cantidad_recibida")
+
+  @@map("transferencias_detalle")
+}
+
+// ----------------------------------------------------------------------------
+// 13. DEVOLUCIONES Y EXCEPCIONES
+// ----------------------------------------------------------------------------
+
+enum EstadoDevolucion {
+  PENDIENTE_INSPECCION
+  RESUELTA
+  ANULADA
+}
+
+model Devolucion {
+  id                 String           @id @default(uuid())
+  folio              String
+  despachoOrigenId   String?          @map("despacho_origen_id")
+  bodegaId           String           @map("bodega_id")
+  motivoId           String           @map("motivo_id")
+  estado             EstadoDevolucion @default(PENDIENTE_INSPECCION)
+  usuarioId          String           @map("usuario_id")
+  creadoEn           DateTime         @default(now())
+
+  detalle DevolucionDetalle[]
+
+  @@unique([bodegaId, folio])
+  @@map("devoluciones")
+}
+
+model DevolucionDetalle {
+  id            String     @id @default(uuid())
+  devolucionId  String     @map("devolucion_id")
+  devolucion    Devolucion @relation(fields: [devolucionId], references: [id])
+  productoId    String     @map("producto_id")
+  loteId        String?    @map("lote_id")
+  serieId       String?    @map("serie_id")
+  cantidad      Decimal    @db.Decimal(18, 6)
+  resolucion    String? // REINGRESO_DISPONIBLE | CUARENTENA | BAJA
+  ubicacionDestinoId String? @map("ubicacion_destino_id")
+
+  @@map("devoluciones_detalle")
+}
+
+// ----------------------------------------------------------------------------
+// 14. CONTEOS Y AJUSTES
+// ----------------------------------------------------------------------------
+
+enum EstadoConteo {
+  PLANIFICADO
+  EN_PROCESO
+  PENDIENTE_APROBACION
+  APROBADO
+  ANULADO
+}
+
+model Conteo {
+  id            String       @id @default(uuid())
+  folio         String
+  bodegaId      String       @map("bodega_id")
+  bodega        Bodega       @relation(fields: [bodegaId], references: [id])
+  tipo          String // GENERAL | CICLICO
+  conteoCiego   Boolean      @default(true) @map("conteo_ciego")
+  estado        EstadoConteo @default(PLANIFICADO)
+  responsableId String       @map("responsable_id")
+  fechaCorte    DateTime     @map("fecha_corte")
+  creadoEn      DateTime     @default(now())
+
+  detalle ConteoDetalle[]
+  ajustes Ajuste[]
+
+  @@unique([bodegaId, folio])
+  @@map("conteos")
+}
+
+model ConteoDetalle {
+  id                String   @id @default(uuid())
+  conteoId          String   @map("conteo_id")
+  conteo            Conteo   @relation(fields: [conteoId], references: [id])
+  productoId        String   @map("producto_id")
+  ubicacionId       String   @map("ubicacion_id")
+  loteId            String?  @map("lote_id")
+  serieId           String?  @map("serie_id")
+  cantidadEsperada  Decimal  @db.Decimal(18, 6) @map("cantidad_esperada")
+  cantidadContada   Decimal? @db.Decimal(18, 6) @map("cantidad_contada")
+  reconteo          Boolean  @default(false)
+
+  @@map("conteos_detalle")
+}
+
+enum EstadoAjuste {
+  PENDIENTE_APROBACION
+  APROBADO
+  RECHAZADO
+}
+
+model Ajuste {
+  id              String       @id @default(uuid())
+  folio           String
+  conteoId        String?      @map("conteo_id")
+  conteo          Conteo?      @relation(fields: [conteoId], references: [id])
+  bodegaId        String       @map("bodega_id")
+  bodega          Bodega       @relation(fields: [bodegaId], references: [id])
+  motivoId        String       @map("motivo_id")
+  estado          EstadoAjuste @default(PENDIENTE_APROBACION)
+  solicitadoPorId String       @map("solicitado_por_id")
+  aprobadoPorId   String?      @map("aprobado_por_id")
+  evidenciaUrl    String?      @map("evidencia_url")
+  operacionId     String?      @map("operacion_id")
+  creadoEn        DateTime     @default(now())
+
+  detalle AjusteDetalle[]
+
+  @@unique([bodegaId, folio])
+  @@map("ajustes")
+}
+
+model AjusteDetalle {
+  id               String   @id @default(uuid())
+  ajusteId         String   @map("ajuste_id")
+  ajuste           Ajuste   @relation(fields: [ajusteId], references: [id])
+  productoId       String   @map("producto_id")
+  ubicacionId      String   @map("ubicacion_id")
+  loteId           String?  @map("lote_id")
+  serieId          String?  @map("serie_id")
+  cantidadEsperada Decimal  @db.Decimal(18, 6) @map("cantidad_esperada")
+  cantidadContada  Decimal  @db.Decimal(18, 6) @map("cantidad_contada")
+  diferencia       Decimal  @db.Decimal(18, 6)
+
+  @@map("ajustes_detalle")
+}
+
+// ----------------------------------------------------------------------------
+// 15. DEMANDA, PRONÓSTICOS Y ESCENARIOS
+// ----------------------------------------------------------------------------
+
+model DemandaRegistrada {
+  id             String   @id @default(uuid())
+  productoId     String   @map("producto_id")
+  producto       Producto @relation(fields: [productoId], references: [id])
+  bodegaId       String   @map("bodega_id")
+  fecha          DateTime
+  cantidadSolicitada Decimal @db.Decimal(18, 6) @map("cantidad_solicitada")
+  cantidadAtendida   Decimal @db.Decimal(18, 6) @map("cantidad_atendida")
+  cantidadNoAtendida Decimal @db.Decimal(18, 6) @map("cantidad_no_atendida")
+
+  @@index([productoId, bodegaId, fecha])
+  @@map("demanda_registrada")
+}
+
+model Pronostico {
+  id              String   @id @default(uuid())
+  productoId      String   @map("producto_id")
+  producto        Producto @relation(fields: [productoId], references: [id])
+  bodegaId        String   @map("bodega_id")
+  fecha           DateTime
+  demandaEstimada Decimal  @db.Decimal(18, 6) @map("demanda_estimada")
+  metodo          String // PROMEDIO_MOVIL | REGLA_SIMPLE
+  errorAbsolutoMedio Decimal? @db.Decimal(18, 6) @map("error_absoluto_medio")
+  creadoEn        DateTime @default(now())
+
+  @@map("pronosticos")
+}
+
+model Escenario {
+  id           String   @id @default(uuid())
+  nombre       String
+  supuestos    Json // { incrementoDemandaPct, retrasoProveedorDias, ... }
+  resultado    Json?
+  creadoPorId  String   @map("creado_por_id")
+  creadoEn     DateTime @default(now())
+
+  @@map("escenarios")
+}
+
+// ----------------------------------------------------------------------------
+// 16. CENTRO DE CARGAS DE DATOS
+// ----------------------------------------------------------------------------
+
+model PlantillaCarga {
+  id          String   @id @default(uuid())
+  empresaId   String?  @map("empresa_id")
+  empresa     Empresa? @relation(fields: [empresaId], references: [id])
+  entidad     String // PRODUCTOS | PROVEEDORES | BODEGAS | UBICACIONES | CONVERSIONES | PARAMETROS_REPOSICION | LOTES | SERIES | INVENTARIO_INICIAL
+  version     String
+  descripcionCampos Json // [{campo, obligatorio, formato, longitud, valoresAdmitidos, ejemplo}]
+  activo      Boolean  @default(true)
+  creadoEn    DateTime @default(now())
+
+  mapeos   MapeoCarga[]
+  cargas   CargaDatos[]
+
+  @@unique([entidad, version])
+  @@map("plantillas_carga")
+}
+
+model MapeoCarga {
+  id            String         @id @default(uuid())
+  empresaId     String         @map("empresa_id")
+  plantillaId   String         @map("plantilla_id")
+  plantilla     PlantillaCarga @relation(fields: [plantillaId], references: [id])
+  nombre        String
+  correspondencia Json // { "columnaArchivo": "campoSistema" }
+  creadoEn      DateTime       @default(now())
+
+  @@map("mapeos_carga")
+}
+
+enum ModoCarga {
+  SOLO_CREACION
+  SOLO_ACTUALIZACION
+  CREACION_Y_ACTUALIZACION
+  VALIDACION_SIN_APLICAR
+}
+
+enum EstadoCarga {
+  RECIBIDA
+  VALIDANDO
+  VALIDADA_CON_ERRORES
+  SIMULADA
+  PENDIENTE_APROBACION
+  APROBADA
+  EJECUTANDO
+  EJECUTADA
+  RECHAZADA
+  ANULADA
+}
+
+// Clave de idempotencia: evita que reintentar la misma solicitud duplique
+// efectos. Se calcula por empresa+entidad+hash de contenido (ver carga.service).
+model CargaDatos {
+  id               String         @id @default(uuid())
+  empresaId        String         @map("empresa_id")
+  empresa          Empresa        @relation(fields: [empresaId], references: [id])
+  plantillaId      String         @map("plantilla_id")
+  plantilla        PlantillaCarga @relation(fields: [plantillaId], references: [id])
+  claveIdempotencia String        @unique @map("clave_idempotencia")
+  nombreArchivo    String         @map("nombre_archivo")
+  modo             ModoCarga
+  estado           EstadoCarga    @default(RECIBIDA)
+  totalFilas       Int            @default(0) @map("total_filas")
+  filasCrear       Int            @default(0) @map("filas_crear")
+  filasActualizar  Int            @default(0) @map("filas_actualizar")
+  filasRechazar    Int            @default(0) @map("filas_rechazar")
+  filasSinCambio   Int            @default(0) @map("filas_sin_cambio")
+  creadoPorId      String         @map("creado_por_id")
+  creadoPor        Usuario        @relation("cargaCreadaPor", fields: [creadoPorId], references: [id])
+  aprobadoPorId    String?        @map("aprobado_por_id")
+  aprobadoPor      Usuario?       @relation("cargaAprobadaPor", fields: [aprobadoPorId], references: [id])
+  creadoEn         DateTime       @default(now())
+  procesadoEn      DateTime?      @map("procesado_en")
+
+  filas    CargaFila[]
+  errores  CargaError[]
+
+  @@map("cargas_datos")
+}
+
+model CargaFila {
+  id            String     @id @default(uuid())
+  cargaId       String     @map("carga_id")
+  carga         CargaDatos @relation(fields: [cargaId], references: [id])
+  numeroFila    Int        @map("numero_fila")
+  datosOriginales Json     @map("datos_originales")
+  datosPropuestos Json?    @map("datos_propuestos")
+  accion        String // CREAR | ACTUALIZAR | SIN_CAMBIO | RECHAZAR
+  entidadResultanteId String? @map("entidad_resultante_id")
+  procesada     Boolean    @default(false)
+
+  @@index([cargaId, numeroFila])
+  @@map("cargas_filas")
+}
+
+model CargaError {
+  id         String     @id @default(uuid())
+  cargaId    String     @map("carga_id")
+  carga      CargaDatos @relation(fields: [cargaId], references: [id])
+  numeroFila Int        @map("numero_fila")
+  campo      String?
+  severidad  String // BLOQUEANTE | ADVERTENCIA
+  mensaje    String
+
+  @@map("cargas_errores")
+}
+
+// ----------------------------------------------------------------------------
+// 17. INTELIGENCIA DE INVENTARIO
+// ----------------------------------------------------------------------------
+
+model Alerta {
+  id                 String    @id @default(uuid())
+  empresaId          String    @map("empresa_id")
+  empresa            Empresa   @relation(fields: [empresaId], references: [id])
+  tipo               String // BAJO_PUNTO_REPOSICION | SOBRESTOCK | VENCIMIENTO_PROXIMO | PROVEEDOR_INCUMPLIMIENTO | DATO_INCOMPLETO
+  entidad            String?
+  entidadId          String?   @map("entidad_id")
+  severidad          String // ALTA | MEDIA | BAJA
+  evidencia          Json
+  estado             String    @default("ABIERTA") // ABIERTA | EN_REVISION | ATENDIDA | DESCARTADA
+  creadoEn           DateTime  @default(now())
+
+  accionesRecomendadas AccionRecomendada[]
+
+  @@map("alertas")
+}
+
+model AccionRecomendada {
+  id              String   @id @default(uuid())
+  alertaId        String   @map("alerta_id")
+  alerta          Alerta   @relation(fields: [alertaId], references: [id])
+  descripcion     String
+  impactoEstimado Json?
+  responsableId   String?  @map("responsable_id")
+  fechaObjetivo   DateTime? @map("fecha_objetivo")
+  estado          String   @default("PROPUESTA") // PROPUESTA | ACEPTADA | RECHAZADA | POSTERGADA | CONVERTIDA_SOLICITUD
+  justificacion   String?
+  creadoEn        DateTime @default(now())
+
+  @@map("acciones_recomendadas")
+}

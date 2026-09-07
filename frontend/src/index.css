@@ -1,0 +1,73 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --borde: #e2e5ea;
+  --texto: #1c2230;
+  --texto-suave: #5b6472;
+  --primario: #1d4ed8;
+  --primario-suave: #eaf0fe;
+  --peligro: #c0392b;
+  --exito: #1e7e34;
+  --advertencia: #a15c00;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--texto);
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--borde); font-size: 0.9rem; }
+th { color: var(--texto-suave); font-weight: 600; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.04em; }
+
+input, select, textarea {
+  padding: 7px 9px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #fff;
+  color: var(--texto);
+}
+
+.btn {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  background: var(--primario);
+  color: #fff;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secundario { background: #fff; color: var(--primario); border: 1px solid var(--primario); }
+.btn-peligro { background: var(--peligro); }
+
+.tarjeta {
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+
+.etiqueta { font-size: 0.78rem; color: var(--texto-suave); display: block; margin-bottom: 3px; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.badge-ok { background: #e3f6e8; color: var(--exito); }
+.badge-alerta { background: #fdece9; color: var(--peligro); }
+.badge-pendiente { background: #fff3da; color: var(--advertencia); }
+
+.mensaje-error { background: #fdecea; color: var(--peligro); padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; }
+.mensaje-ok { background: #e6f6ea; color: var(--exito); padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; }

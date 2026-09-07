@@ -1,0 +1,3 @@
+producto_codigo,bodega_codigo,ubicacion_codigo,cantidad,unidad_codigo,lote_codigo,fecha_vencimiento,costo_unitario
+PROD-001,BOD-CENTRAL,ALM-A-01,10,CJ,LOTE-2026-01,2026-12-31,950
+PROD-001,BOD-CENTRAL,ALM-A-02,50,UN,LOTE-2026-02,2027-03-15,

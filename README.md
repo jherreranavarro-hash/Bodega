@@ -31,21 +31,32 @@ plantillas/ Plantillas y archivos de ejemplo para el centro de cargas de datos
 
 ## Puesta en marcha automática (recomendado)
 
-Con PostgreSQL y Node.js 20+ instalados, un solo comando deja todo arriba: crea el rol
-y la base de datos si no existen, instala dependencias, aplica migraciones, siembra los
-datos de demostración y levanta backend y frontend en segundo plano.
+Un solo paso deja todo arriba: instala Node.js/PostgreSQL si faltan (usando `winget` en
+Windows), crea el rol y la base de datos si no existen, instala dependencias, aplica
+migraciones, siembra los datos de demostración, levanta backend y frontend, y abre el
+navegador en la aplicación.
+
+**Windows**: haz doble clic en `iniciar.bat` (o ejecútalo desde una consola). La primera
+vez te pedirá la contraseña del superusuario `postgres` para poder crear el rol/base de
+datos de la aplicación — si PostgreSQL ya estaba instalado y configurado con ese rol y
+esa base, puedes dejarlo en blanco (Enter) y continúa igual. Para detener todo:
+`detener.bat`.
+
+**macOS / Linux**:
 
 ```bash
 ./iniciar.sh
 ```
 
-Al terminar muestra la URL (`http://localhost:5173`) y las credenciales de demostración.
-Es seguro volver a ejecutarlo (todos los pasos son idempotentes). Los logs quedan en
-`logs/backend.log` y `logs/frontend.log`. Para detener ambos procesos:
+Para detener:
 
 ```bash
 ./detener.sh
 ```
+
+En ambos casos, al terminar se muestra la URL (`http://localhost:5173`) y las
+credenciales de demostración. Es seguro volver a ejecutarlo (todos los pasos son
+idempotentes). Los logs quedan en `logs/backend.log` y `logs/frontend.log`.
 
 ## Puesta en marcha manual (paso a paso, para entender o personalizar cada parte)
 

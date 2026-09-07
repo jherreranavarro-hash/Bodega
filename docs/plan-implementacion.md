@@ -42,24 +42,34 @@ directo desde la reserva sigue funcionando quien no la necesite. Cubierto por 3 
 (`tests/preparaciones.test.ts`) y por el smoke test de UI (flujo completo solicitud →
 reserva → preparación → verificación → despacho).
 
+## Fase 2.3 — Solicitudes de compra con aprobación propia (completada en esta iteración)
+Las solicitudes de compra nacen siempre `PENDIENTE_APROBACION` (nunca ya aprobadas); la
+aprobación y el rechazo exigen un usuario distinto de quien solicitó. Se puede generar
+una solicitud directamente desde la alerta de bajo punto de reposición de un
+producto/bodega (`POST /api/compras/solicitudes/desde-reposicion`), respetando la
+cantidad mínima de compra y el múltiplo de pedido del producto, y rechazando la
+generación si el producto no está realmente bajo su punto de reposición. Solo una
+solicitud `APROBADA` puede convertirse en orden de compra, exigiendo costo pactado por
+línea y sin permitir convertirla dos veces. Cubierto por 5 pruebas
+(`tests/solicitudes-compra.test.ts`) y por el smoke test de UI.
+
 ## Fase 3 — Pendiente explícito de alta prioridad
 Estas son las brechas más importantes respecto del alcance completo del encargo
 (sección 2). Se documentan aquí en vez de darlas por hechas:
 
-1. **Solicitudes de compra con aprobación propia** antes de convertirse en orden de
-   compra (hoy la conversión existe a nivel de datos; falta el flujo de aprobación
-   dedicado y su vínculo con las alertas de reposición).
-2. **Bandeja de decisiones** (alertas → acción propuesta → aceptar/rechazar/postergar/
+1. **Bandeja de decisiones** (alertas → acción propuesta → aceptar/rechazar/postergar/
    convertir en solicitud, con justificación). Los indicadores que la alimentarían ya
-   existen; falta la capa de generación automática de alertas y su UI.
-3. **Pronósticos y escenarios de simulación** (`pronosticos`, `escenarios` en el
+   existen, y ahora también existe el destino natural de "convertir en solicitud"
+   (`compras/solicitudes/desde-reposicion`); falta la capa de generación automática de
+   alertas (hoy la generación es manual, a pedido) y su UI de bandeja.
+2. **Pronósticos y escenarios de simulación** (`pronosticos`, `escenarios` en el
    modelo): sin cálculo implementado. No se debe mostrar una precisión que no existe —
    por eso no hay ningún endpoint que "invente" un pronóstico todavía.
-4. **Script de reconciliación de saldos** contra el historial de movimientos (ver
+3. **Script de reconciliación de saldos** contra el historial de movimientos (ver
    `docs/modelo-datos.md` §5).
-5. **Manejo de períodos cerrados** y de registros con fecha efectiva atrasada más allá
+4. **Manejo de períodos cerrados** y de registros con fecha efectiva atrasada más allá
    de la separación de campos ya existente en el modelo.
-6. **Multimoneda real**: el modelo guarda `moneda`/`tipo_cambio` en capas de costo, pero
+5. **Multimoneda real**: el modelo guarda `moneda`/`tipo_cambio` en capas de costo, pero
    no hay conversión ni consolidación multimoneda en los indicadores.
 
 ## Fase 4 — Endurecimiento operativo (pendiente)

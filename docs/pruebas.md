@@ -17,13 +17,14 @@ residuales de una corrida anterior):
 ```
 ✓ tests/inventario.test.ts (7 tests)
 ✓ tests/devoluciones.test.ts (4 tests)
+✓ tests/solicitudes-compra.test.ts (5 tests)
 ✓ tests/cargas.test.ts (4 tests)
 ✓ tests/preparaciones.test.ts (3 tests)
 ✓ tests/ajustes.test.ts (1 test)
 ✓ tests/api.test.ts (3 tests)
 
-Test Files  6 passed (6)
-     Tests  22 passed (22)
+Test Files  7 passed (7)
+     Tests  27 passed (27)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -59,6 +60,12 @@ Adicionalmente se prueba (más allá del mínimo pedido):
   referencia una preparación se rechaza si esa preparación no está `LISTA`; no se puede
   marcar `LISTA` con líneas parcialmente verificadas; no se puede verificar más cantidad
   de la solicitada; y una vez lista, el despacho procede normalmente.
+- **Solicitudes de compra con aprobación propia** (`tests/solicitudes-compra.test.ts`):
+  toda solicitud nace `PENDIENTE_APROBACION`; quien la solicita no puede aprobarla ni
+  rechazarla; solo una solicitud `APROBADA` puede convertirse en orden de compra, exige
+  costo por línea y no se puede convertir dos veces; y generarla desde la alerta de
+  reposición respeta la cantidad mínima de compra y el múltiplo de pedido del producto
+  (y se rechaza si el producto no está realmente bajo su punto de reposición).
 
 ## Evidencia de la aplicación real (no solo servicios)
 

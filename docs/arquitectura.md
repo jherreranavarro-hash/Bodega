@@ -66,7 +66,7 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 | Administración y seguridad (empresas, usuarios, roles, permisos, auditoría) | Implementado | `modules/auth`, `middleware/*` |
 | Mantenedores (productos, bodegas, ubicaciones, proveedores, catálogos) | Implementado (subconjunto priorizado) | `modules/productos`, `modules/maestros` |
 | Centro de cargas de datos | Implementado (entidades PRODUCTOS e INVENTARIO_INICIAL) | `modules/cargas` |
-| Compras y abastecimiento | Implementado (OC + recepción; solicitud de compra a nivel de datos) | `modules/compras` |
+| Compras y abastecimiento | Implementado (solicitud con aprobación propia → orden de compra → recepción) | `modules/compras` |
 | Recepción y almacenamiento | Implementado | `modules/recepciones` |
 | Inventario y trazabilidad | Implementado (motor central) | `modules/inventario` |
 | Solicitudes y reservas | Implementado | `modules/salidas` |

@@ -42,16 +42,26 @@ iniciado en este entregable).
   (.xlsx) además de CSV; escaneo de archivos maliciosos más allá del filtro de
   extensión/tamaño.
 
-## Compras y abastecimiento — Implementado (núcleo)
+## Compras y abastecimiento — Implementado
+- Solicitudes de compra (`/api/compras/solicitudes`): nacen **siempre**
+  `PENDIENTE_APROBACION` (nunca se crean ya aprobadas); `POST .../:id/aprobar` y
+  `.../:id/rechazar` exigen que el aprobador sea un usuario distinto de quien solicitó
+  (separación de funciones, igual criterio que ajustes y devoluciones).
+- `POST /api/compras/solicitudes/desde-reposicion`: genera la solicitud directamente
+  desde la alerta de bajo punto de reposición de un producto/bodega, respetando la
+  cantidad mínima de compra y el múltiplo de pedido del producto (sección 11 del
+  encargo); falla explícitamente si el producto no está realmente bajo su punto de
+  reposición en ese momento (no se genera una solicitud injustificada).
+- `POST /api/compras/solicitudes/:id/convertir-orden`: solo convierte solicitudes en
+  estado `APROBADA`, exige un costo pactado por cada línea, y no permite convertir la
+  misma solicitud dos veces (queda vinculada 1:1 con la orden de compra resultante vía
+  `OrdenCompra.solicitudCompraId`).
 - Órdenes de compra (`/api/compras/ordenes`) con detalle, reprogramación de fecha
-  comprometida conservando la fecha original.
-- **Modelo de datos completo, sin flujo de aprobación propio**: `solicitudes_compra` —
-  el modelo soporta generar una OC desde una solicitud, pero el flujo de aprobación de
-  la solicitud en sí (previo a convertirse en OC) no tiene endpoint dedicado en esta
-  iteración.
-- Pendiente: aprobación multinivel configurable por monto; alertas automáticas que
-  generen solicitudes de compra (el indicador de reposición existe; la conversión
-  automática a solicitud es manual/futura, ver `docs/plan-implementacion.md`).
+  comprometida conservando la fecha original; también admite creación directa sin pasar
+  por una solicitud, para operaciones simples que no requieren ese control adicional.
+- Pendiente: aprobación multinivel configurable por monto; conversión parcial de una
+  solicitud en varias órdenes de compra (hoy es 1:1); vínculo automático entre la
+  bandeja de decisiones (aún no implementada) y la generación de estas solicitudes.
 
 ## Recepción y almacenamiento — Implementado
 - `POST /api/compras/recepciones`: recepción total o parcial, actualización de

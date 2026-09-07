@@ -11,16 +11,27 @@ interface OrdenCompra {
   detalle: { id: string; productoId: string; cantidadPedida: string; cantidadRecibida: string; costoUnitarioPactado: string }[];
 }
 
+interface SolicitudCompra {
+  id: string;
+  folio: string;
+  estado: string;
+  origen: string;
+  detalle: { id: string; productoId: string; cantidad: string }[];
+  ordenesCompra: { id: string }[];
+}
+
 export function Compras() {
   const { bodegas } = useBodegas();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [ordenes, setOrdenes] = useState<OrdenCompra[]>([]);
+  const [solicitudes, setSolicitudes] = useState<SolicitudCompra[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
   async function cargar() {
     setOrdenes(await api.get<OrdenCompra[]>("/compras/ordenes"));
+    setSolicitudes(await api.get<SolicitudCompra[]>("/compras/solicitudes"));
   }
 
   useEffect(() => {
@@ -29,11 +40,72 @@ export function Compras() {
     cargar();
   }, []);
 
+  async function aprobar(id: string) {
+    setError(null);
+    try {
+      await api.post(`/compras/solicitudes/${id}/aprobar`);
+      setMensaje("Solicitud de compra aprobada.");
+      await cargar();
+    } catch (err) {
+      setError(err instanceof ErrorApi ? err.message : "No se pudo aprobar (¿es el mismo usuario que la solicitó?)");
+    }
+  }
+
+  async function rechazar(id: string) {
+    setError(null);
+    try {
+      await api.post(`/compras/solicitudes/${id}/rechazar`);
+      await cargar();
+    } catch (err) {
+      setError(err instanceof ErrorApi ? err.message : "No se pudo rechazar");
+    }
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <h2 style={{ margin: 0 }}>Compras y recepción</h2>
       {error && <div className="mensaje-error">{error}</div>}
       {mensaje && <div className="mensaje-ok">{mensaje}</div>}
+
+      <FormularioSolicitudCompra
+        productos={productos}
+        bodegas={bodegas}
+        onCreada={async () => { setMensaje("Solicitud de compra creada, pendiente de aprobación."); await cargar(); }}
+        onError={setError}
+      />
+
+      <div className="tarjeta">
+        <h3 style={{ marginTop: 0 }}>Solicitudes de compra</h3>
+        <p style={{ color: "var(--texto-suave)", fontSize: "0.85rem", marginTop: -6 }}>
+          Toda solicitud nace pendiente de aprobación. Quien la crea no puede aprobarla ni rechazarla.
+        </p>
+        <table>
+          <thead><tr><th>Folio</th><th>Origen</th><th>Estado</th><th>Líneas</th><th>Acción</th></tr></thead>
+          <tbody>
+            {solicitudes.map((s) => (
+              <tr key={s.id}>
+                <td>{s.folio}</td>
+                <td>{s.origen}</td>
+                <td><span className={`badge ${s.estado === "APROBADA" ? "badge-ok" : s.estado === "RECHAZADA" ? "badge-alerta" : "badge-pendiente"}`}>{s.estado.replaceAll("_", " ")}</span></td>
+                <td>{s.detalle.length}</td>
+                <td>
+                  {s.estado === "PENDIENTE_APROBACION" && (
+                    <span style={{ display: "flex", gap: 6 }}>
+                      <button className="btn" onClick={() => aprobar(s.id)}>Aprobar</button>
+                      <button className="btn btn-secundario" onClick={() => rechazar(s.id)}>Rechazar</button>
+                    </span>
+                  )}
+                  {s.estado === "APROBADA" && s.ordenesCompra.length === 0 && (
+                    <ConvertirEnOrden solicitud={s} proveedores={proveedores} productos={productos} onConvertida={async () => { setMensaje("Solicitud convertida en orden de compra."); await cargar(); }} onError={setError} />
+                  )}
+                  {s.estado === "APROBADA" && s.ordenesCompra.length > 0 && <span className="badge badge-ok">Convertida en OC</span>}
+                </td>
+              </tr>
+            ))}
+            {solicitudes.length === 0 && <tr><td colSpan={5} style={{ color: "var(--texto-suave)" }}>Sin solicitudes de compra.</td></tr>}
+          </tbody>
+        </table>
+      </div>
 
       <FormularioOrdenCompra
         proveedores={proveedores}
@@ -208,5 +280,112 @@ function FormularioRecepcion({
       <label><span className="etiqueta">Lote (si aplica)</span><input value={loteCodigo} onChange={(e) => setLoteCodigo(e.target.value)} /></label>
       <div style={{ alignSelf: "end" }}><button className="btn" type="submit">Contabilizar recepción</button></div>
     </form>
+  );
+}
+
+function FormularioSolicitudCompra({
+  productos,
+  bodegas,
+  onCreada,
+  onError,
+}: {
+  productos: Producto[];
+  bodegas: ReturnType<typeof useBodegas>["bodegas"];
+  onCreada: () => void;
+  onError: (m: string) => void;
+}) {
+  const [folio, setFolio] = useState("");
+  const [productoId, setProductoId] = useState("");
+  const [bodegaDestinoId, setBodegaDestinoId] = useState("");
+  const [cantidad, setCantidad] = useState(10);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    try {
+      const producto = productos.find((p) => p.id === productoId);
+      await api.post("/compras/solicitudes", {
+        folio,
+        detalle: [{ productoId, cantidad, unidadId: producto?.unidadBaseId, bodegaDestinoId }],
+      });
+      setFolio("");
+      onCreada();
+    } catch (err) {
+      onError(err instanceof ErrorApi ? err.message : "No se pudo crear la solicitud de compra");
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="tarjeta grid-form">
+      <span style={{ gridColumn: "1 / -1", fontWeight: 600 }}>Nueva solicitud de compra</span>
+      <label><span className="etiqueta">Folio *</span><input required value={folio} onChange={(e) => setFolio(e.target.value)} /></label>
+      <label>
+        <span className="etiqueta">Bodega destino *</span>
+        <select required value={bodegaDestinoId} onChange={(e) => setBodegaDestinoId(e.target.value)}>
+          <option value="" disabled>Seleccione...</option>
+          {bodegas.map((b) => <option key={b.id} value={b.id}>{b.codigo}</option>)}
+        </select>
+      </label>
+      <label>
+        <span className="etiqueta">Producto *</span>
+        <select required value={productoId} onChange={(e) => setProductoId(e.target.value)}>
+          <option value="" disabled>Seleccione...</option>
+          {productos.map((p) => <option key={p.id} value={p.id}>{p.codigo}</option>)}
+        </select>
+      </label>
+      <label><span className="etiqueta">Cantidad</span><input type="number" min={1} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} /></label>
+      <div style={{ alignSelf: "end" }}><button className="btn" type="submit">Solicitar compra</button></div>
+    </form>
+  );
+}
+
+function ConvertirEnOrden({
+  solicitud,
+  proveedores,
+  productos,
+  onConvertida,
+  onError,
+}: {
+  solicitud: SolicitudCompra;
+  proveedores: Proveedor[];
+  productos: Producto[];
+  onConvertida: () => void;
+  onError: (m: string) => void;
+}) {
+  const [proveedorId, setProveedorId] = useState("");
+  const [costos, setCostos] = useState<Record<string, number>>({});
+
+  async function convertir() {
+    try {
+      await api.post(`/compras/solicitudes/${solicitud.id}/convertir-orden`, {
+        folioOrdenCompra: `OC-${solicitud.folio}`,
+        proveedorId,
+        costos: solicitud.detalle.map((d) => ({ solicitudDetalleId: d.id, costoUnitarioPactado: costos[d.id] ?? 0 })),
+      });
+      onConvertida();
+    } catch (err) {
+      onError(err instanceof ErrorApi ? err.message : "No se pudo convertir en orden de compra");
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)}>
+        <option value="" disabled>Proveedor...</option>
+        {proveedores.map((p) => <option key={p.id} value={p.id}>{p.codigo}</option>)}
+      </select>
+      {solicitud.detalle.map((d) => {
+        const producto = productos.find((p) => p.id === d.productoId);
+        return (
+          <input
+            key={d.id}
+            type="number"
+            placeholder={`Costo ${producto?.codigo ?? d.productoId}`}
+            value={costos[d.id] ?? ""}
+            onChange={(e) => setCostos({ ...costos, [d.id]: Number(e.target.value) })}
+          />
+        );
+      })}
+      <button className="btn btn-secundario" disabled={!proveedorId} onClick={convertir}>Convertir en orden de compra</button>
+    </div>
   );
 }

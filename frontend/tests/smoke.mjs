@@ -57,6 +57,30 @@ await paso("compras y recepción visible", async () => {
   await page.waitForSelector("text=Nueva orden de compra");
 });
 
+const folioRecepcionSmoke = `REC-SMOKE-${Date.now()}`;
+await paso("registrar recepción real vía formulario (stock base para el resto del recorrido)", async () => {
+  await page.fill('form:has-text("Registrar recepción") input:near(:text("Folio"))', folioRecepcionSmoke);
+  await page.selectOption('form:has-text("Registrar recepción") select >> nth=0', { label: "BOD-CENTRAL" });
+  await page.selectOption('form:has-text("Registrar recepción") select >> nth=1', { label: "ALM-A-01" });
+  await page.selectOption('form:has-text("Registrar recepción") select >> nth=3', { label: "PROD-001" });
+  const cantidadInputs = page.locator('form:has-text("Registrar recepción") input[type="number"]');
+  await cantidadInputs.nth(0).fill("50");
+  await cantidadInputs.nth(1).fill("100");
+  await page.click('form:has-text("Registrar recepción") button[type="submit"]');
+  await page.waitForSelector("text=Recepción contabilizada", { timeout: 10000 });
+});
+
+const folioSolicitudCompra = `SC-SMOKE-${Date.now()}`;
+await paso("registrar solicitud de compra real (nace pendiente de aprobación)", async () => {
+  await page.fill('form:has-text("Nueva solicitud de compra") input:near(:text("Folio"))', folioSolicitudCompra);
+  await page.selectOption('form:has-text("Nueva solicitud de compra") select >> nth=0', { label: "BOD-CENTRAL" });
+  await page.selectOption('form:has-text("Nueva solicitud de compra") select >> nth=1', { label: "PROD-001" });
+  await page.click('form:has-text("Nueva solicitud de compra") button[type="submit"]');
+  const fila = page.locator("tr", { hasText: folioSolicitudCompra });
+  await fila.waitFor({ timeout: 10000 });
+  await fila.getByText("PENDIENTE APROBACION").waitFor({ timeout: 10000 });
+});
+
 const folioSolicitud = `SS-SMOKE-${Date.now()}`;
 await paso("flujo real: solicitud -> reserva -> preparación -> despacho", async () => {
   await page.click('a:has-text("Solicitudes, Reservas y Despacho")');

@@ -5,9 +5,130 @@ import { prisma } from "../../lib/prisma.js";
 import { requiereAutenticacion, requierePermiso } from "../../middleware/auth.middleware.js";
 import { contabilizarRecepcion } from "../recepciones/recepcion.service.js";
 import { registrarAuditoria } from "../../middleware/auditoria.middleware.js";
+import {
+  crearSolicitudCompra,
+  generarSolicitudDesdeReposicion,
+  aprobarSolicitudCompra,
+  rechazarSolicitudCompra,
+  convertirEnOrdenCompra,
+} from "./solicitud-compra.service.js";
 
 export const comprasRouter = Router();
 comprasRouter.use(requiereAutenticacion);
+
+const solicitudDetalleSchema = z.object({
+  productoId: z.string().uuid(),
+  cantidad: z.number().positive(),
+  unidadId: z.string().uuid(),
+  bodegaDestinoId: z.string().uuid(),
+  fechaRequerida: z.coerce.date().optional(),
+});
+
+const solicitudCompraSchema = z.object({
+  folio: z.string().min(1),
+  proveedorSugeridoId: z.string().uuid().optional(),
+  detalle: z.array(solicitudDetalleSchema).min(1),
+});
+
+// Toda solicitud nace PENDIENTE_APROBACION: nunca se crea ya aprobada.
+comprasRouter.post("/solicitudes", requierePermiso("compras", "crear"), async (req, res) => {
+  const parsed = solicitudCompraSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const solicitud = await crearSolicitudCompra({
+      empresaId: req.usuario!.empresaId,
+      solicitanteId: req.usuario!.usuarioId,
+      ...parsed.data,
+    });
+    await registrarAuditoria({
+      empresaId: req.usuario!.empresaId,
+      usuarioId: req.usuario!.usuarioId,
+      accion: "solicitudes_compra.crear",
+      entidad: "solicitudes_compra",
+      entidadId: solicitud.id,
+      resultado: "OK",
+    });
+    res.status(201).json(solicitud);
+  } catch (err) {
+    res.status((err as { status?: number }).status ?? 400).json({ error: (err as Error).message });
+  }
+});
+
+const desdeReposicionSchema = z.object({ productoId: z.string().uuid(), bodegaId: z.string().uuid(), folio: z.string().min(1) });
+
+// Propone una solicitud desde el indicador de reposición: respeta mínimos y múltiplos de compra.
+comprasRouter.post("/solicitudes/desde-reposicion", requierePermiso("compras", "crear"), async (req, res) => {
+  const parsed = desdeReposicionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const solicitud = await generarSolicitudDesdeReposicion({ ...parsed.data, solicitanteId: req.usuario!.usuarioId });
+    res.status(201).json(solicitud);
+  } catch (err) {
+    res.status((err as { status?: number }).status ?? 400).json({ error: (err as Error).message });
+  }
+});
+
+comprasRouter.get("/solicitudes", requierePermiso("compras", "consultar"), async (req, res) => {
+  const solicitudes = await prisma.solicitudCompra.findMany({
+    where: { empresaId: req.usuario!.empresaId },
+    include: { detalle: true, ordenesCompra: true },
+    orderBy: { creadoEn: "desc" },
+  });
+  res.json(solicitudes);
+});
+
+// Separación de funciones: quien solicita la compra no puede aprobarla ni rechazarla.
+comprasRouter.post("/solicitudes/:id/aprobar", requierePermiso("compras", "aprobar"), async (req, res) => {
+  try {
+    const solicitud = await aprobarSolicitudCompra(req.params.id, req.usuario!.usuarioId);
+    await registrarAuditoria({
+      empresaId: req.usuario!.empresaId,
+      usuarioId: req.usuario!.usuarioId,
+      accion: "solicitudes_compra.aprobar",
+      entidad: "solicitudes_compra",
+      entidadId: solicitud.id,
+      resultado: "OK",
+    });
+    res.json(solicitud);
+  } catch (err) {
+    res.status((err as { status?: number }).status ?? 400).json({ error: (err as Error).message });
+  }
+});
+
+comprasRouter.post("/solicitudes/:id/rechazar", requierePermiso("compras", "aprobar"), async (req, res) => {
+  try {
+    const solicitud = await rechazarSolicitudCompra(req.params.id, req.usuario!.usuarioId);
+    res.json(solicitud);
+  } catch (err) {
+    res.status((err as { status?: number }).status ?? 400).json({ error: (err as Error).message });
+  }
+});
+
+const conversionSchema = z.object({
+  folioOrdenCompra: z.string().min(1),
+  proveedorId: z.string().uuid(),
+  fechaCompromisoOriginal: z.coerce.date().optional(),
+  costos: z.array(z.object({ solicitudDetalleId: z.string().uuid(), costoUnitarioPactado: z.number().nonnegative() })).min(1),
+});
+
+comprasRouter.post("/solicitudes/:id/convertir-orden", requierePermiso("compras", "crear"), async (req, res) => {
+  const parsed = conversionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const orden = await convertirEnOrdenCompra({ solicitudId: req.params.id, ...parsed.data });
+    await registrarAuditoria({
+      empresaId: req.usuario!.empresaId,
+      usuarioId: req.usuario!.usuarioId,
+      accion: "solicitudes_compra.convertir_orden",
+      entidad: "ordenes_compra",
+      entidadId: orden.id,
+      resultado: "OK",
+    });
+    res.status(201).json(orden);
+  } catch (err) {
+    res.status((err as { status?: number }).status ?? 400).json({ error: (err as Error).message });
+  }
+});
 
 const ocDetalleSchema = z.object({
   productoId: z.string().uuid(),

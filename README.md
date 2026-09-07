@@ -74,7 +74,7 @@ en `prisma/seed.ts` y se identifican con el RUT `RUT-*`/`76.123.456-7` y código
 
 ```bash
 cd backend
-npm test         # 48 pruebas de aceptación contra PostgreSQL real (ver docs/pruebas.md)
+npm test         # 57 pruebas de aceptación contra PostgreSQL real (ver docs/pruebas.md)
 npm run reconciliar -- 76.123.456-7   # concilia saldos vs. movimientos (RUT de la empresa demo)
 
 cd frontend

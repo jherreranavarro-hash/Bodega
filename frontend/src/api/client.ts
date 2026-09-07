@@ -50,5 +50,6 @@ export const api = {
   get: <T>(ruta: string) => solicitud<T>("GET", ruta),
   post: <T>(ruta: string, cuerpo?: unknown) => solicitud<T>("POST", ruta, cuerpo),
   put: <T>(ruta: string, cuerpo?: unknown) => solicitud<T>("PUT", ruta, cuerpo),
+  del: <T>(ruta: string) => solicitud<T>("DELETE", ruta),
   postForm: <T>(ruta: string, formData: FormData) => solicitud<T>("POST", ruta, undefined, { formData }),
 };

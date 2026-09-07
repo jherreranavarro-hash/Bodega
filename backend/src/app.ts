@@ -7,6 +7,8 @@ import { bodegasRouter, ubicacionesRouter } from "./modules/maestros/bodegas.rou
 import { proveedoresRouter } from "./modules/maestros/proveedores.routes.js";
 import { catalogosRouter } from "./modules/maestros/catalogos.routes.js";
 import { parametrosRouter } from "./modules/maestros/parametros.routes.js";
+import { adjuntosRouter } from "./modules/adjuntos/adjuntos.routes.js";
+import { administracionRouter } from "./modules/administracion/administracion.routes.js";
 import { cargasRouter } from "./modules/cargas/carga.routes.js";
 import { comprasRouter } from "./modules/compras/compras.routes.js";
 import { salidasRouter } from "./modules/salidas/salidas.routes.js";
@@ -32,6 +34,8 @@ export function crearApp() {
   app.use("/api/proveedores", proveedoresRouter);
   app.use("/api/catalogos", catalogosRouter);
   app.use("/api/parametros", parametrosRouter);
+  app.use("/api/adjuntos", adjuntosRouter);
+  app.use("/api/administracion", administracionRouter);
   app.use("/api/cargas", cargasRouter);
   app.use("/api/compras", comprasRouter);
   app.use("/api/salidas", salidasRouter);

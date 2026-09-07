@@ -13,6 +13,7 @@ const ENLACES = [
   { ruta: "/devoluciones", etiqueta: "Devoluciones" },
   { ruta: "/ajustes", etiqueta: "Conteos y Ajustes" },
   { ruta: "/pronosticos", etiqueta: "Pronósticos y Escenarios" },
+  { ruta: "/administracion", etiqueta: "Administración" },
 ];
 
 export function Layout() {

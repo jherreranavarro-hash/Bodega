@@ -58,6 +58,9 @@ export interface DatosNuevaCarga {
  * duplicar filas — la clave de idempotencia se calcula por contenido, no
  * por nombre de archivo.
  */
+/** Límite de filas por archivo: una carga masiva mal formada no debe poder saturar el proceso de validación/ejecución. */
+const MAXIMO_FILAS_POR_CARGA = 5000;
+
 export async function recibirArchivo(datos: DatosNuevaCarga) {
   const plantilla = await prisma.plantillaCarga.findFirst({
     where: { entidad: datos.entidad, activo: true },
@@ -71,6 +74,11 @@ export async function recibirArchivo(datos: DatosNuevaCarga) {
 
   const filas = parse(datos.contenido, { columns: true, skip_empty_lines: true, trim: true }) as Record<string, string>[];
   if (filas.length === 0) throw new ErrorValidacion("El archivo no contiene filas");
+  if (filas.length > MAXIMO_FILAS_POR_CARGA) {
+    throw new ErrorValidacion(
+      `El archivo tiene ${filas.length} filas; el máximo permitido por carga es ${MAXIMO_FILAS_POR_CARGA}. Divídalo en archivos más pequeños.`
+    );
+  }
 
   return prisma.cargaDatos.create({
     data: {

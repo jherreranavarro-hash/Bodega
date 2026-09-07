@@ -101,15 +101,47 @@ Las cuatro brechas de alta prioridad detectadas tras la fase 2 quedaron resuelta
    mezcla monedas porque todo se convierte a la moneda base desde el ingreso, pero no
    hay una vista en una moneda de reporte distinta a la base.
 
-## Fase 4 — Endurecimiento operativo (pendiente)
-- Almacenamiento de evidencias en un backend de archivos real (hoy `adjuntos` solo
-  guarda una URL).
+## Fase 4 — Endurecimiento operativo (parcialmente completada en esta iteración)
+
+Completado:
+
+1. **Límite de filas por carga** (`modules/cargas/carga.service.ts`): `recibirArchivo`
+   rechaza explícitamente un archivo con más de 5000 filas (`MAXIMO_FILAS_POR_CARGA`)
+   antes de simularlo o ejecutarlo, para que una carga mal formada no pueda saturar el
+   proceso de validación. Cubierto en `tests/cargas.test.ts`.
+2. **Almacenamiento real de evidencias** (`modules/adjuntos`): API genérica de adjuntos
+   (`entidad` + `entidadId`) que ahora guarda el archivo real en disco
+   (`backend/storage/adjuntos/`, fuera del árbol servido estáticamente y excluido de git),
+   con un nombre de archivo aleatorio (UUID) que nunca se expone al cliente — la descarga
+   siempre pasa por `GET /api/adjuntos/:id/descargar`, una ruta autenticada que resuelve
+   el archivo real a partir del registro en base de datos, nunca por una ruta de archivo
+   entregada por el cliente. Extensión restringida a `.jpg/.jpeg/.png/.pdf/.webp` y tamaño
+   máximo de 10 MB. Cubierto por 4 pruebas (`tests/adjuntos.test.ts`). **Pendiente**:
+   conectar esta API genérica con los campos `evidenciaUrl` propios de ajustes,
+   devoluciones y despachos (hoy siguen siendo un campo de texto independiente,
+   sin pasar por este módulo) — ver notas puntuales en `docs/modulos.md`.
+3. **Panel de administración de roles y permisos en la UI** (`modules/administracion`,
+   pantalla "Administración"): matriz de permisos por rol (otorgar/revocar con un clic,
+   verificado siempre en el servidor) y cambio de rol de un usuario, restringido a
+   usuarios de la misma empresa (`PUT /api/administracion/usuarios/:id/rol` responde 404
+   si el usuario pertenece a otra empresa). El rol `administrador` no se puede editar
+   desde la matriz (siempre tiene todos los permisos). **Nota de diseño importante**:
+   roles y permisos son hoy un catálogo global compartido entre todas las empresas, no
+   uno por empresa — editar los permisos de un rol aquí afecta a ese rol para **todas**
+   las empresas que lo usan. Es una simplificación deliberada de esta iteración, no un
+   error; separar el catálogo por empresa (o clonar el rol al editarlo) queda como mejora
+   futura si se necesitan permisos distintos por empresa. Cubierto por 4 pruebas
+   (`tests/administracion.test.ts`) y por el smoke test de UI (otorgar y revocar un
+   permiso real y confirmar que la casilla cambia de estado).
+
+Pendiente (requiere infraestructura externa a este entorno de desarrollo, no se debe
+activar sin decidirlo con el equipo de operaciones):
+
 - Observabilidad (métricas, trazas, alertas de infraestructura).
 - Backups automatizados y prueba periódica de restauración (`docs/operacion.md` describe
-  el procedimiento manual mínimo; falta automatizarlo).
-- Endurecimiento de la carga de archivos (escaneo antivirus, límite de filas por carga,
-  cuotas por usuario).
-- Panel de administración de roles/permisos en la UI.
+  el procedimiento manual mínimo; falta automatizarlo con un orquestador/cron real).
+- Escaneo antivirus de archivos subidos (cargas y adjuntos) — hoy el control es solo
+  extensión permitida + tamaño máximo, sin inspección de contenido malicioso.
 
 ## Fase 5 — Asistente de IA (pendiente, fuera de alcance de esta iteración)
 El asistente de lenguaje natural descrito en la sección 13 del encargo, con acceso

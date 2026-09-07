@@ -77,6 +77,18 @@ describe("Caso 8: importar cajas con conversión a unidades", () => {
   });
 });
 
+describe("Endurecimiento: límite de filas por archivo", () => {
+  it("rechaza un archivo con más filas que el máximo permitido", async () => {
+    const e = await crearEscenario();
+    const encabezado = "codigo,nombre,unidad_base_codigo\n";
+    const filas = Array.from({ length: 5001 }, (_, i) => `PROD-MASIVO-${i},Producto masivo ${i},UN\n`).join("");
+    const contenido = Buffer.from(encabezado + filas);
+    await expect(
+      recibirArchivo({ empresaId: e.empresa.id, entidad: "PRODUCTOS", modo: "CREACION_Y_ACTUALIZACION", nombreArchivo: "masivo.csv", contenido, usuarioId: e.usuario.id })
+    ).rejects.toThrow();
+  });
+});
+
 describe("Costos desconocidos no se asumen cero", () => {
   it("deja el costo unitario en null (pendiente) si no se informa", async () => {
     const e = await crearEscenario();

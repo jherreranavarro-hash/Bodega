@@ -11,8 +11,19 @@ iniciado en este entregable).
 - Endpoints: `POST /api/auth/login`.
 - Middleware `requiereAutenticacion` + `requierePermiso(recurso, accion)` en **todas**
   las rutas de negocio.
-- Pendiente: pantalla de administración de roles/permisos desde la UI (hoy se gestionan
-  vía seed/API); recuperación de contraseña; expiración/rotación de tokens.
+- **Panel de administración de roles y permisos** (`modules/administracion`, pantalla
+  "Administración"): matriz de permisos por rol donde cada casilla otorga o revoca un
+  permiso real (`POST`/`DELETE /api/administracion/roles/:rolId/permisos`), siempre
+  verificado también en el servidor, nunca solo en la UI. El rol `administrador` se
+  muestra fijo (no editable) porque siempre tiene todos los permisos. Cambio de rol de
+  un usuario (`PUT /api/administracion/usuarios/:id/rol`) restringido a usuarios de la
+  misma empresa que quien administra (404 si el usuario objetivo es de otra empresa).
+  **Roles y permisos son un catálogo global**, no uno por empresa: cambiar los permisos
+  de un rol aquí lo cambia para todas las empresas que lo usan — simplificación
+  deliberada de esta iteración, documentada en `plan-implementacion.md`. Cubierto por 4
+  pruebas (`tests/administracion.test.ts`) y por el smoke test de UI.
+- Pendiente: catálogo de roles/permisos por empresa (hoy es global, ver nota arriba);
+  recuperación de contraseña; expiración/rotación de tokens.
 
 ## Mantenedores — Implementado (subconjunto priorizado)
 - Productos (`/api/productos`): CRUD, activar/desactivar, búsqueda por código/nombre/
@@ -34,12 +45,15 @@ iniciado en este entregable).
   simulación (crear/actualizar/rechazar/sin cambio) → aprobación → ejecución
   transaccional → errores descargables en CSV.
 - Idempotencia por hash de contenido (no por nombre de archivo).
+- Límite de 5000 filas por archivo (`MAXIMO_FILAS_POR_CARGA`): un archivo mayor se
+  rechaza explícitamente antes de simularlo o ejecutarlo, para que una carga mal
+  formada no pueda saturar el proceso de validación.
 - Detalle completo en `docs/centro-de-cargas.md`.
 - Pendiente: entidades adicionales (proveedores, bodegas, ubicaciones, conversiones,
   parámetros de reposición, lotes, series como cargas independientes — hoy solo se
   crean por mantenedor o como parte de inventario inicial); mapeo de columnas
   configurable por el usuario (`mapeos_carga` existe en el modelo, sin UI); soporte Excel
-  (.xlsx) además de CSV; escaneo de archivos maliciosos más allá del filtro de
+  (.xlsx) además de CSV; escaneo antivirus de archivos maliciosos más allá del filtro de
   extensión/tamaño.
 
 ## Compras y abastecimiento — Implementado
@@ -196,6 +210,19 @@ iniciado en este entregable).
   programar la generación de alertas como tarea periódica en vez de manual; métodos de
   pronóstico adicionales (estacionalidad, suavizado exponencial) más allá del promedio
   móvil con evaluación simple.
+
+## Adjuntos y evidencias — Implementado (API genérica, sin integrar aún a flujos puntuales)
+- `POST /api/adjuntos` (multipart, campo `archivo` + `entidad`/`entidadId`),
+  `GET /api/adjuntos?entidad=&entidadId=`, `GET /api/adjuntos/:id/descargar`,
+  `DELETE /api/adjuntos/:id`: almacenamiento real en disco
+  (`backend/storage/adjuntos/`), con nombre de archivo aleatorio (nunca expuesto al
+  cliente) y descarga siempre a través de una ruta autenticada que resuelve el archivo
+  real desde el registro en base de datos. Extensión restringida
+  (`.jpg/.jpeg/.png/.pdf/.webp`) y tamaño máximo de 10 MB. Cubierto por 4 pruebas
+  (`tests/adjuntos.test.ts`).
+- Pendiente: conectar esta API con los campos `evidenciaUrl` de ajustes, devoluciones y
+  despachos (hoy cada uno sigue teniendo su propio campo de texto, ver notas en sus
+  secciones); escaneo antivirus del contenido subido.
 
 ## Reportes e integraciones — Parcial
 - Exportación CSV de errores de carga.

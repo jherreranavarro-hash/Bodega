@@ -19,17 +19,19 @@ residuales de una corrida anterior):
 ✓ tests/devoluciones.test.ts (4 tests)
 ✓ tests/solicitudes-compra.test.ts (5 tests)
 ✓ tests/pronosticos.test.ts (5 tests)
+✓ tests/cargas.test.ts (5 tests)
 ✓ tests/alertas.test.ts (6 tests)
-✓ tests/cargas.test.ts (4 tests)
 ✓ tests/reconciliacion.test.ts (3 tests)
 ✓ tests/preparaciones.test.ts (3 tests)
+✓ tests/administracion.test.ts (4 tests)
 ✓ tests/ajustes.test.ts (1 test)
 ✓ tests/periodos.test.ts (4 tests)
 ✓ tests/multimoneda.test.ts (3 tests)
 ✓ tests/api.test.ts (3 tests)
+✓ tests/adjuntos.test.ts (4 tests)
 
-Test Files  12 passed (12)
-     Tests  48 passed (48)
+Test Files  14 passed (14)
+     Tests  57 passed (57)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -101,6 +103,17 @@ Adicionalmente se prueba (más allá del mínimo pedido):
   conservando el costo tal como fue facturado en el documento de recepción, y guardando
   moneda original y tipo de cambio en la capa de costo; sin moneda indicada, asume la
   moneda de la empresa sin exigir tipo de cambio.
+- **Límite de filas del centro de cargas** (`tests/cargas.test.ts`): un archivo con más
+  filas que `MAXIMO_FILAS_POR_CARGA` se rechaza antes de crear la carga.
+- **Adjuntos en disco** (`tests/adjuntos.test.ts`): guarda el archivo real y permite
+  leerlo de vuelta con el mismo contenido; rechaza una extensión no permitida; rechaza
+  un archivo que excede el tamaño máximo; eliminar el adjunto borra también el archivo
+  del disco.
+- **Administración de roles y permisos** (`tests/administracion.test.ts`): otorgar y
+  revocar un permiso de un rol se refleja de inmediato en lo que ese rol puede hacer;
+  un administrador puede cambiar el rol de un usuario de su misma empresa; no puede
+  cambiar el rol de un usuario de otra empresa (404); un rol sin el permiso
+  `administracion.consultar` recibe 403 al listar roles.
 
 ## Evidencia de la aplicación real (no solo servicios)
 
@@ -112,6 +125,8 @@ formulario (la base de stock para el resto del recorrido); registrar una solicit
 compra (queda pendiente de aprobación); el flujo completo solicitud → reserva →
 preparación → verificación → despacho; registrar una devolución y verificar que no
 queda disponible; crear una orden de compra; el flujo completo de carga de datos (subir
-CSV → validar y simular → aprobar → ejecutar); y calcular un pronóstico (declara datos
-insuficientes) y simular un escenario real. Esto confirma que la interfaz no tiene
-"botones ficticios": cada acción llama a la API real y persiste en PostgreSQL.
+CSV → validar y simular → aprobar → ejecutar); calcular un pronóstico (declara datos
+insuficientes) y simular un escenario real; y en Administración, otorgar/revocar un
+permiso real de un rol y confirmar que la casilla cambia de estado tras la llamada al
+servidor. Esto confirma que la interfaz no tiene "botones ficticios": cada acción llama
+a la API real y persiste en PostgreSQL.

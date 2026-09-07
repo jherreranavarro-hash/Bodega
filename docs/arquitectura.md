@@ -53,9 +53,10 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 - **Procesamiento de cargas**: el Centro de Cargas de Datos parsea CSV (`csv-parse`),
   dejando las filas en una zona de preparación (`cargas_filas`) antes de tocar datos
   operativos, con clave de idempotencia por contenido de archivo.
-- **Almacenamiento de evidencias**: tabla `adjuntos` (URL + metadatos); en este entorno de
-  demostración no se implementa un backend de almacenamiento de archivos (S3 o similar)
-  — se documenta como pendiente en `plan-implementacion.md`.
+- **Almacenamiento de evidencias**: `modules/adjuntos` guarda el archivo real en disco
+  local (`backend/storage/adjuntos/`, con nombre aleatorio y descarga solo vía ruta
+  autenticada) en vez de solo una URL; no hay backend de archivos en la nube (S3 o
+  similar) en este entorno, ni escaneo antivirus del contenido subido — pendiente.
 - **Monitoreo**: `auditoria` registra toda acción sensible (quién, cuándo, sobre qué,
   resultado). No se implementó un stack de observabilidad (métricas/trazas) — pendiente.
 
@@ -63,7 +64,7 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 
 | Módulo | Estado | Ubicación |
 |---|---|---|
-| Administración y seguridad (empresas, usuarios, roles, permisos, auditoría) | Implementado | `modules/auth`, `middleware/*` |
+| Administración y seguridad (empresas, usuarios, roles, permisos, auditoría) | Implementado, con panel de administración de roles/permisos en la UI | `modules/auth`, `modules/administracion`, `middleware/*` |
 | Mantenedores (productos, bodegas, ubicaciones, proveedores, catálogos) | Implementado (subconjunto priorizado) | `modules/productos`, `modules/maestros` |
 | Centro de cargas de datos | Implementado (entidades PRODUCTOS e INVENTARIO_INICIAL) | `modules/cargas` |
 | Compras y abastecimiento | Implementado (solicitud con aprobación propia → orden de compra → recepción) | `modules/compras` |
@@ -77,6 +78,7 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 | Inteligencia de inventario | Implementado: indicadores, bandeja de decisiones, pronósticos y escenarios | `modules/indicadores`, `modules/alertas`, `modules/analitica` |
 | Costos y valorización | Implementado: FIFO/promedio ponderado, multimoneda en recepciones | `modules/recepciones`, `modules/despachos` |
 | Reportes e integraciones | Exportación CSV de errores de carga; sin integraciones externas | `modules/cargas` |
+| Adjuntos y evidencias | Implementado: almacenamiento real en disco, API genérica sin integrar aún a los campos de evidencia puntuales | `modules/adjuntos` |
 | Asistente de IA | No implementado (fuera de alcance de esta iteración) | — |
 
 Ver el detalle módulo por módulo, con lo que falta explícitamente, en `docs/modulos.md`.

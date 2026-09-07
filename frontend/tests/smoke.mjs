@@ -194,6 +194,27 @@ await paso("pronósticos: declara datos insuficientes sin inventar cifra, y simu
   await page.waitForSelector("text=Punto reposición actual", { timeout: 10000 });
 });
 
+await paso("administración: otorga y revoca un permiso real de un rol", async () => {
+  await page.click('a:has-text("Administración")');
+  await page.waitForSelector("text=Matriz de permisos por rol");
+
+  const fila = page.locator("tr", { hasText: "productos" }).filter({ hasText: ".exportar" }).first();
+  await fila.waitFor({ timeout: 10000 });
+
+  // Ubica la casilla del rol "Auditor" por la posición de su columna en el encabezado.
+  const indiceColumna = await page.locator("thead th").allTextContents().then((th) => th.indexOf("Auditor"));
+  if (indiceColumna < 0) throw new Error('No se encontró la columna "Auditor" en la matriz de permisos');
+  const casilla = fila.locator("td").nth(indiceColumna).locator("input");
+  const estabaMarcada = await casilla.isChecked();
+  await casilla.click();
+  await page.waitForSelector("text=Permiso productos.exportar", { timeout: 10000 });
+  const quedoMarcada = await casilla.isChecked();
+  if (quedoMarcada === estabaMarcada) throw new Error("El estado de la casilla de permiso no cambió tras el clic");
+
+  await page.waitForSelector("text=Usuarios");
+  await page.waitForSelector("text=admin@bodegademo.cl");
+});
+
 if (errores.length > 0) {
   console.log("Errores de consola detectados:", errores);
 }

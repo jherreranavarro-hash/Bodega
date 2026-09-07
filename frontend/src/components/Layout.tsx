@@ -3,6 +3,7 @@ import { useAuth } from "../auth/AuthContext";
 
 const ENLACES = [
   { ruta: "/", etiqueta: "Tablero" },
+  { ruta: "/alertas", etiqueta: "Centro de Decisiones" },
   { ruta: "/productos", etiqueta: "Productos" },
   { ruta: "/bodegas", etiqueta: "Bodegas y Ubicaciones" },
   { ruta: "/cargas", etiqueta: "Centro de Cargas" },

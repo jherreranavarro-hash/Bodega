@@ -14,6 +14,7 @@ import { transferenciasRouter } from "./modules/transferencias/transferencias.ro
 import { devolucionesRouter } from "./modules/devoluciones/devoluciones.routes.js";
 import { ajustesRouter } from "./modules/ajustes/ajustes.routes.js";
 import { indicadoresRouter } from "./modules/indicadores/indicadores.routes.js";
+import { alertasRouter } from "./modules/alertas/alertas.routes.js";
 
 export function crearApp() {
   const app = express();
@@ -36,6 +37,7 @@ export function crearApp() {
   app.use("/api/devoluciones", devolucionesRouter);
   app.use("/api", ajustesRouter);
   app.use("/api/indicadores", indicadoresRouter);
+  app.use("/api/alertas", alertasRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     // eslint-disable-next-line no-console

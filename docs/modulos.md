@@ -128,13 +128,30 @@ iniciado en este entregable).
 - Pendiente: bloqueo de movimientos durante el conteo (hoy es responsabilidad operativa,
   no forzada por el sistema) o conciliación de operaciones posteriores al conteo.
 
-## Inteligencia de inventario — Parcial
+## Inteligencia de inventario — Parcial (bandeja de decisiones implementada)
 - Implementado: stock bajo punto de reposición, sobrestock, vencimientos próximos,
   disponibilidad por producto/bodega, exactitud de inventario por conteo.
+- **Bandeja de decisiones implementada** (`modules/alertas`, pantalla "Centro de
+  Decisiones"): `POST /api/alertas/generar` detecta condiciones de alerta a partir de
+  los tres indicadores anteriores (bajo punto de reposición, sobrestock, vencimiento
+  próximo), sin duplicar una alerta ya abierta para el mismo producto/bodega o lote.
+  Cada alerta guarda la evidencia numérica que la sustenta y trae una acción recomendada
+  explícita, con severidad calculada (ALTA si el faltante supera el 50% del punto de
+  reposición, o si el vencimiento es en 7 días o menos). Cada acción se puede aceptar,
+  rechazar (exige justificación), postergar (con nueva fecha objetivo) o —solo para
+  alertas de reposición— convertir en una solicitud de compra real (que nace igualmente
+  `PENDIENTE_APROBACION`, ver módulo de Compras). **Ninguna acción ejecuta por sí sola**
+  una compra, baja, transferencia o ajuste — solo llega hasta el paso ya controlado y
+  auditado de cada flujo correspondiente (sección 12 del encargo).
+- La generación de alertas es una acción explícita a pedido (botón "Detectar alertas
+  ahora"), no un proceso automático en segundo plano — documentado como supuesto en
+  `plan-implementacion.md`.
 - **Modelo de datos, sin cálculo automático**: `demanda_registrada`, `pronosticos`,
-  `escenarios`, `alertas`, `acciones_recomendadas` — las tablas existen para soportar
-  el diseño, pero el cálculo de pronósticos, la generación automática de alertas y la
-  bandeja de decisiones con aceptar/rechazar/postergar **no están implementados**.
+  `escenarios` — las tablas existen para soportar el diseño, pero el cálculo de
+  pronósticos y la simulación de escenarios **no están implementados**.
+- Pendiente: alertas de tipo `PROVEEDOR_INCUMPLIMIENTO` y `DATO_INCOMPLETO` (el modelo
+  las contempla; no hay una fuente de datos implementada que las genere todavía);
+  programar la generación de alertas como tarea periódica en vez de manual.
 
 ## Reportes e integraciones — Parcial
 - Exportación CSV de errores de carga.

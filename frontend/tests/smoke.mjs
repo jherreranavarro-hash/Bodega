@@ -36,6 +36,17 @@ await paso("iniciar sesión", async () => {
   await page.waitForSelector("text=Tablero de decisiones", { timeout: 10000 });
 });
 
+await paso("centro de decisiones: detectar alerta real y convertirla en solicitud", async () => {
+  await page.click('a:has-text("Centro de Decisiones")');
+  await page.waitForSelector("text=Centro de decisiones");
+  await page.click('button:has-text("Detectar alertas ahora")');
+  await page.waitForSelector("text=Bajo punto de reposición", { timeout: 10000 });
+
+  const tarjeta = page.locator(".tarjeta", { hasText: "Bajo punto de reposición" }).first();
+  await tarjeta.getByRole("button", { name: "Convertir en solicitud de compra" }).click();
+  await page.waitForSelector("text=Convertida en solicitud de compra, pendiente de aprobación", { timeout: 10000 });
+});
+
 await paso("ver productos", async () => {
   await page.click('a:has-text("Productos")');
   await page.waitForSelector("text=PROD-001");

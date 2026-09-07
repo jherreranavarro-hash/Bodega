@@ -18,13 +18,14 @@ residuales de una corrida anterior):
 ✓ tests/inventario.test.ts (7 tests)
 ✓ tests/devoluciones.test.ts (4 tests)
 ✓ tests/solicitudes-compra.test.ts (5 tests)
+✓ tests/alertas.test.ts (6 tests)
 ✓ tests/cargas.test.ts (4 tests)
 ✓ tests/preparaciones.test.ts (3 tests)
 ✓ tests/ajustes.test.ts (1 test)
 ✓ tests/api.test.ts (3 tests)
 
-Test Files  7 passed (7)
-     Tests  27 passed (27)
+Test Files  8 passed (8)
+     Tests  33 passed (33)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -66,6 +67,12 @@ Adicionalmente se prueba (más allá del mínimo pedido):
   costo por línea y no se puede convertir dos veces; y generarla desde la alerta de
   reposición respeta la cantidad mínima de compra y el múltiplo de pedido del producto
   (y se rechaza si el producto no está realmente bajo su punto de reposición).
+- **Bandeja de decisiones** (`tests/alertas.test.ts` — sección 12 del encargo): generar
+  alertas dos veces seguidas no duplica una alerta ya abierta para el mismo
+  producto/bodega; cada alerta trae evidencia consultable y una acción `PROPUESTA`;
+  rechazar exige justificación; una acción ya resuelta no puede resolverse de nuevo;
+  convertir en solicitud de compra solo aplica a alertas de reposición (se rechaza para
+  vencimientos) y deja tanto la acción como la alerta en su estado final correcto.
 
 ## Evidencia de la aplicación real (no solo servicios)
 

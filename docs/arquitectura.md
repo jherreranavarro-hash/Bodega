@@ -74,7 +74,7 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 | Transferencias | Implementado | `modules/transferencias` |
 | Devoluciones y excepciones | Implementado (ingreso a cuarentena → resolución reingreso/cuarentena/baja) | `modules/devoluciones` |
 | Conteos y ajustes | Implementado | `modules/ajustes` |
-| Inteligencia de inventario | Indicadores base implementados; pronósticos/escenarios/alertas automatizadas pendientes | `modules/indicadores` |
+| Inteligencia de inventario | Indicadores + bandeja de decisiones implementados; pronósticos/escenarios pendientes | `modules/indicadores`, `modules/alertas` |
 | Reportes e integraciones | Exportación CSV de errores de carga; sin integraciones externas | `modules/cargas` |
 | Asistente de IA | No implementado (fuera de alcance de esta iteración) | — |
 

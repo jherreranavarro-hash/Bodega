@@ -11,6 +11,7 @@ import { Salidas } from "./pages/Salidas";
 import { Transferencias } from "./pages/Transferencias";
 import { Devoluciones } from "./pages/Devoluciones";
 import { Ajustes } from "./pages/Ajustes";
+import { Alertas } from "./pages/Alertas";
 
 function RutaProtegida({ children }: { children: React.ReactNode }) {
   const { autenticado } = useAuth();
@@ -37,6 +38,7 @@ function Rutas() {
         <Route path="/transferencias" element={<Transferencias />} />
         <Route path="/devoluciones" element={<Devoluciones />} />
         <Route path="/ajustes" element={<Ajustes />} />
+        <Route path="/alertas" element={<Alertas />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

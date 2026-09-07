@@ -53,23 +53,31 @@ solicitud `APROBADA` puede convertirse en orden de compra, exigiendo costo pacta
 línea y sin permitir convertirla dos veces. Cubierto por 5 pruebas
 (`tests/solicitudes-compra.test.ts`) y por el smoke test de UI.
 
+## Fase 2.4 — Bandeja de decisiones (completada en esta iteración)
+`POST /api/alertas/generar` detecta condiciones de alerta a partir de los indicadores
+de reposición, sobrestock y vencimientos próximos, sin duplicar alertas ya abiertas para
+la misma entidad. Cada alerta trae la evidencia numérica y una acción recomendada
+explícita, con severidad calculada. Cada acción se acepta, rechaza (exige
+justificación), posterga (con nueva fecha objetivo), o —solo para reposición— se
+convierte en una solicitud de compra real que nace igualmente pendiente de aprobación.
+Ninguna acción ejecuta una compra, baja, transferencia o ajuste por sí sola: siempre
+desemboca en el paso ya controlado y auditado del flujo correspondiente. La generación
+es a pedido (botón "Detectar alertas ahora"), no una tarea programada. Cubierto por 6
+pruebas (`tests/alertas.test.ts`) y por el smoke test de UI (detectar → convertir en
+solicitud).
+
 ## Fase 3 — Pendiente explícito de alta prioridad
 Estas son las brechas más importantes respecto del alcance completo del encargo
 (sección 2). Se documentan aquí en vez de darlas por hechas:
 
-1. **Bandeja de decisiones** (alertas → acción propuesta → aceptar/rechazar/postergar/
-   convertir en solicitud, con justificación). Los indicadores que la alimentarían ya
-   existen, y ahora también existe el destino natural de "convertir en solicitud"
-   (`compras/solicitudes/desde-reposicion`); falta la capa de generación automática de
-   alertas (hoy la generación es manual, a pedido) y su UI de bandeja.
-2. **Pronósticos y escenarios de simulación** (`pronosticos`, `escenarios` en el
+1. **Pronósticos y escenarios de simulación** (`pronosticos`, `escenarios` en el
    modelo): sin cálculo implementado. No se debe mostrar una precisión que no existe —
    por eso no hay ningún endpoint que "invente" un pronóstico todavía.
-3. **Script de reconciliación de saldos** contra el historial de movimientos (ver
+2. **Script de reconciliación de saldos** contra el historial de movimientos (ver
    `docs/modelo-datos.md` §5).
-4. **Manejo de períodos cerrados** y de registros con fecha efectiva atrasada más allá
+3. **Manejo de períodos cerrados** y de registros con fecha efectiva atrasada más allá
    de la separación de campos ya existente en el modelo.
-5. **Multimoneda real**: el modelo guarda `moneda`/`tipo_cambio` en capas de costo, pero
+4. **Multimoneda real**: el modelo guarda `moneda`/`tipo_cambio` en capas de costo, pero
    no hay conversión ni consolidación multimoneda en los indicadores.
 
 ## Fase 4 — Endurecimiento operativo (pendiente)

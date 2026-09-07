@@ -20,6 +20,7 @@ const RECURSOS_ACCIONES: [string, string[]][] = [
   ["conteos", ["consultar", "crear", "ejecutar"]],
   ["ajustes", ["consultar", "crear", "aprobar"]],
   ["indicadores", ["consultar"]],
+  ["alertas", ["consultar", "ejecutar"]],
 ];
 
 const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.accion" o "*" */ }> = {
@@ -29,7 +30,7 @@ const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.acc
     permisos: [
       "productos.consultar", "bodegas.*", "ubicaciones.*", "cargas.consultar", "cargas.aprobar",
       "compras.consultar", "recepciones.*", "solicitudes_salida.*", "reservas.*", "preparaciones.*", "despachos.*",
-      "transferencias.*", "devoluciones.*", "conteos.*", "ajustes.consultar", "ajustes.aprobar", "indicadores.consultar",
+      "transferencias.*", "devoluciones.*", "conteos.*", "ajustes.consultar", "ajustes.aprobar", "indicadores.consultar", "alertas.*",
     ],
   },
   operador: {
@@ -38,12 +39,12 @@ const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.acc
   },
   compras: {
     nombre: "Compras",
-    permisos: ["productos.consultar", "proveedores.*", "compras.*", "recepciones.consultar", "indicadores.consultar"],
+    permisos: ["productos.consultar", "proveedores.*", "compras.*", "recepciones.consultar", "indicadores.consultar", "alertas.*"],
   },
   solicitante: { nombre: "Solicitante", permisos: ["productos.consultar", "solicitudes_salida.consultar", "solicitudes_salida.crear"] },
-  aprobador: { nombre: "Aprobador", permisos: ["compras.aprobar", "cargas.aprobar", "ajustes.aprobar", "solicitudes_salida.aprobar", "indicadores.consultar"] },
-  auditor: { nombre: "Auditor", permisos: ["productos.consultar", "bodegas.consultar", "ubicaciones.consultar", "cargas.consultar", "compras.consultar", "recepciones.consultar", "solicitudes_salida.consultar", "reservas.consultar", "despachos.consultar", "transferencias.consultar", "conteos.consultar", "ajustes.consultar", "indicadores.consultar"] },
-  gerencia: { nombre: "Gerencia", permisos: ["indicadores.consultar", "productos.consultar", "compras.consultar"] },
+  aprobador: { nombre: "Aprobador", permisos: ["compras.aprobar", "cargas.aprobar", "ajustes.aprobar", "solicitudes_salida.aprobar", "indicadores.consultar", "alertas.consultar"] },
+  auditor: { nombre: "Auditor", permisos: ["productos.consultar", "bodegas.consultar", "ubicaciones.consultar", "cargas.consultar", "compras.consultar", "recepciones.consultar", "solicitudes_salida.consultar", "reservas.consultar", "despachos.consultar", "transferencias.consultar", "conteos.consultar", "ajustes.consultar", "indicadores.consultar", "alertas.consultar"] },
+  gerencia: { nombre: "Gerencia", permisos: ["indicadores.consultar", "productos.consultar", "compras.consultar", "alertas.consultar"] },
 };
 
 async function main() {

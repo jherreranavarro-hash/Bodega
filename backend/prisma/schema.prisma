@@ -671,7 +671,15 @@ model MovimientoInventario {
   lote              Lote?             @relation(fields: [loteId], references: [id])
   serieId           String?           @map("serie_id")
   serie             Serie?            @relation(fields: [serieId], references: [id])
+  // Estado del saldo AFECTADO EN DESTINO (o el único estado, si el movimiento
+  // no tiene destino). Cuando origen y destino tienen estados distintos
+  // (p. ej. transferencia: origen DISPONIBLE -> destino TRANSITO), el estado
+  // del lado origen se guarda aparte en estadoInventarioOrigen: un movimiento
+  // con ambas ubicaciones informadas puede tocar dos "cuentas" de estado
+  // distintas, y el motor de reconciliación necesita ambas para reconstruir
+  // saldos_inventario exactamente desde este ledger.
   estadoInventario  EstadoInventario  @default(DISPONIBLE) @map("estado_inventario")
+  estadoInventarioOrigen EstadoInventario? @map("estado_inventario_origen")
   cantidad          Decimal           @db.Decimal(18, 6) // firmada: + entra, - sale (en unidad base)
   costoUnitario     Decimal?          @db.Decimal(18, 6) @map("costo_unitario")
   fechaEfectiva     DateTime          @map("fecha_efectiva")
@@ -1249,12 +1257,12 @@ model DemandaRegistrada {
   productoId     String   @map("producto_id")
   producto       Producto @relation(fields: [productoId], references: [id])
   bodegaId       String   @map("bodega_id")
-  fecha          DateTime
-  cantidadSolicitada Decimal @db.Decimal(18, 6) @map("cantidad_solicitada")
-  cantidadAtendida   Decimal @db.Decimal(18, 6) @map("cantidad_atendida")
-  cantidadNoAtendida Decimal @db.Decimal(18, 6) @map("cantidad_no_atendida")
+  fecha          DateTime // truncada a día: agrega toda la demanda del día en una sola fila
+  cantidadSolicitada Decimal @default(0) @db.Decimal(18, 6) @map("cantidad_solicitada")
+  cantidadAtendida   Decimal @default(0) @db.Decimal(18, 6) @map("cantidad_atendida")
+  cantidadNoAtendida Decimal @default(0) @db.Decimal(18, 6) @map("cantidad_no_atendida")
 
-  @@index([productoId, bodegaId, fecha])
+  @@unique([productoId, bodegaId, fecha])
   @@map("demanda_registrada")
 }
 

@@ -212,6 +212,8 @@ function FormularioRecepcion({
   const [cantidad, setCantidad] = useState(10);
   const [costo, setCosto] = useState(100);
   const [loteCodigo, setLoteCodigo] = useState("");
+  const [moneda, setMoneda] = useState("CLP");
+  const [tipoCambio, setTipoCambio] = useState<number | "">("");
 
   const ubicacionesDeBodega = bodegas.find((b) => b.id === bodegaId)?.ubicaciones ?? [];
 
@@ -233,6 +235,8 @@ function FormularioRecepcion({
             cantidadRecibida: cantidad,
             cantidadAceptada: cantidad,
             costoUnitario: costo,
+            moneda: moneda !== "CLP" ? moneda : undefined,
+            tipoCambio: moneda !== "CLP" && tipoCambio !== "" ? tipoCambio : undefined,
           },
         ],
       });
@@ -276,7 +280,21 @@ function FormularioRecepcion({
         </select>
       </label>
       <label><span className="etiqueta">Cantidad aceptada</span><input type="number" min={0} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} /></label>
-      <label><span className="etiqueta">Costo unitario</span><input type="number" min={0} value={costo} onChange={(e) => setCosto(Number(e.target.value))} /></label>
+      <label>
+        <span className="etiqueta">Moneda del costo</span>
+        <select value={moneda} onChange={(e) => setMoneda(e.target.value)}>
+          <option value="CLP">CLP (moneda de la empresa)</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+        </select>
+      </label>
+      <label><span className="etiqueta">Costo unitario {moneda !== "CLP" ? `(en ${moneda})` : ""}</span><input type="number" min={0} value={costo} onChange={(e) => setCosto(Number(e.target.value))} /></label>
+      {moneda !== "CLP" && (
+        <label>
+          <span className="etiqueta">Tipo de cambio {moneda}→CLP *</span>
+          <input type="number" min={0} required value={tipoCambio} onChange={(e) => setTipoCambio(e.target.value === "" ? "" : Number(e.target.value))} />
+        </label>
+      )}
       <label><span className="etiqueta">Lote (si aplica)</span><input value={loteCodigo} onChange={(e) => setLoteCodigo(e.target.value)} /></label>
       <div style={{ alignSelf: "end" }}><button className="btn" type="submit">Contabilizar recepción</button></div>
     </form>

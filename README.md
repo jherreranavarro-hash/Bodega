@@ -1,17 +1,19 @@
 # Bodega Demo — Sistema Integral de Bodega, Inventario y Toma de Decisiones
 
 Sistema modular de administración de bodegas e inventario: mantenedores, centro de
-cargas de datos, compras, recepción, reservas, despacho, transferencias, conteos/ajustes
-e indicadores de decisión, con persistencia real en PostgreSQL, control de acceso por
-rol/empresa/bodega, trazabilidad completa y pruebas automatizadas.
+cargas de datos, compras (con solicitud y aprobación propia), recepción (multimoneda),
+reservas, preparación, despacho, transferencias, devoluciones, conteos/ajustes,
+indicadores, bandeja de decisiones con alertas automáticas, y pronósticos/escenarios de
+simulación — con persistencia real en PostgreSQL, control de acceso por rol/empresa/
+bodega, períodos contables cerrados, reconciliación de saldos, trazabilidad completa y
+pruebas automatizadas.
 
-Este repositorio es una **implementación funcional de un núcleo end-to-end**, no una
-maqueta. Lee `docs/plan-implementacion.md` para ver qué está completo, qué es parcial
-y qué queda pendiente de forma explícita — la envergadura pedida (sección 1 del
-encargo) es la de un ERP de bodega completo; aquí se entregó el motor transaccional,
-el modelo de datos completo y un recorrido real de punta a punta, priorizado según
-la sección 17 del encargo ("primero arquitectura y modelo, luego una operación
-completa de principio a fin").
+Este repositorio es una **implementación funcional**, no una maqueta. Lee
+`docs/plan-implementacion.md` para ver qué está completo y qué queda pendiente de forma
+explícita (el asistente de IA en lenguaje natural de la sección 13 del encargo queda
+fuera de alcance). El desarrollo se priorizó según la sección 17 del encargo ("primero
+arquitectura y modelo, luego una operación completa de principio a fin"), ampliando
+luego módulo por módulo con pruebas reales en cada paso.
 
 ## Estructura del repositorio
 
@@ -72,10 +74,11 @@ en `prisma/seed.ts` y se identifican con el RUT `RUT-*`/`76.123.456-7` y código
 
 ```bash
 cd backend
-npm test        # 15 pruebas de aceptación contra PostgreSQL real (ver docs/pruebas.md)
+npm test         # 48 pruebas de aceptación contra PostgreSQL real (ver docs/pruebas.md)
+npm run reconciliar -- 76.123.456-7   # concilia saldos vs. movimientos (RUT de la empresa demo)
 
 cd frontend
-npm run smoke   # recorrido end-to-end real en navegador (requiere backend+frontend arriba)
+npm run smoke    # recorrido end-to-end real en navegador (requiere backend+frontend arriba)
 ```
 
 ## Documentación

@@ -21,6 +21,7 @@ const RECURSOS_ACCIONES: [string, string[]][] = [
   ["ajustes", ["consultar", "crear", "aprobar"]],
   ["indicadores", ["consultar"]],
   ["alertas", ["consultar", "ejecutar"]],
+  ["parametros", ["consultar", "modificar"]],
 ];
 
 const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.accion" o "*" */ }> = {

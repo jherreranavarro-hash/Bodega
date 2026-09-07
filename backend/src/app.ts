@@ -6,6 +6,7 @@ import { productosRouter } from "./modules/productos/productos.routes.js";
 import { bodegasRouter, ubicacionesRouter } from "./modules/maestros/bodegas.routes.js";
 import { proveedoresRouter } from "./modules/maestros/proveedores.routes.js";
 import { catalogosRouter } from "./modules/maestros/catalogos.routes.js";
+import { parametrosRouter } from "./modules/maestros/parametros.routes.js";
 import { cargasRouter } from "./modules/cargas/carga.routes.js";
 import { comprasRouter } from "./modules/compras/compras.routes.js";
 import { salidasRouter } from "./modules/salidas/salidas.routes.js";
@@ -15,6 +16,7 @@ import { devolucionesRouter } from "./modules/devoluciones/devoluciones.routes.j
 import { ajustesRouter } from "./modules/ajustes/ajustes.routes.js";
 import { indicadoresRouter } from "./modules/indicadores/indicadores.routes.js";
 import { alertasRouter } from "./modules/alertas/alertas.routes.js";
+import { analiticaRouter } from "./modules/analitica/analitica.routes.js";
 
 export function crearApp() {
   const app = express();
@@ -29,6 +31,7 @@ export function crearApp() {
   app.use("/api/ubicaciones", ubicacionesRouter);
   app.use("/api/proveedores", proveedoresRouter);
   app.use("/api/catalogos", catalogosRouter);
+  app.use("/api/parametros", parametrosRouter);
   app.use("/api/cargas", cargasRouter);
   app.use("/api/compras", comprasRouter);
   app.use("/api/salidas", salidasRouter);
@@ -38,6 +41,7 @@ export function crearApp() {
   app.use("/api", ajustesRouter);
   app.use("/api/indicadores", indicadoresRouter);
   app.use("/api/alertas", alertasRouter);
+  app.use("/api/analitica", analiticaRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     // eslint-disable-next-line no-console

@@ -137,6 +137,10 @@ carga retorna el registro existente en vez de duplicar filas.
 | `20260907124654_init` | Esquema completo inicial (todas las entidades) |
 | `20260907124727_saldo_business_key` | Índice único funcional de saldos (ver §2) |
 | `20260907125843_relaciones_bodega` | Relaciones FK explícitas bodega↔recepción/despacho/solicitud_salida/conteo/ajuste/transferencia, para integridad referencial real y filtrado por empresa |
+| `20260907130500_folios_por_bodega` | Folios de transferencias/conteos/ajustes/devoluciones/preparaciones dejan de ser únicos globalmente y pasan a ser únicos por bodega (evita colisiones entre empresas/bodegas distintas) |
+| `20260907140000_devoluciones_flujo` | Campos de resolución en `devoluciones`/`devoluciones_detalle` (motivo, evidencia, responsable, operación de resolución) |
+| `20260907180000_demanda_unica_por_dia` | Índice único `(producto_id, bodega_id, fecha)` en `demanda_registrada`, para poder acumular la demanda del día con `upsert` sin duplicar filas |
+| `20260907190000_movimiento_estado_origen` | Agrega `estado_inventario_origen` a `movimientos_inventario` (ver §5) |
 
 Ejecutar `npm run prisma:migrate` (desarrollo) o `npm run prisma:deploy` (aplicar en un
 entorno existente sin generar nuevas migraciones) desde `backend/`.
@@ -145,7 +149,54 @@ entorno existente sin generar nuevas migraciones) desde `backend/`.
 
 Como el saldo es una proyección derivada, siempre puede reconstruirse sumando
 `movimientos_inventario` agrupado por `(producto_id, ubicacion_destino_id, lote_id,
-serie_id, estado_inventario)` menos lo agrupado por `ubicacion_origen_id` en el mismo
-grano. Un script de conciliación que compare esa suma contra `saldos_inventario` y
-reporte diferencias **no está implementado en este entregable** — se deja como tarea
-explícita de la fase de endurecimiento operativo (`plan-implementacion.md`, fase 4).
+serie_id, estado_inventario)` menos lo agrupado por `(ubicacion_origen_id, ...,
+estado_inventario_origen)` en el mismo grano.
+
+Un movimiento con origen y destino en la **misma** bodega pero con estados de
+inventario distintos (por ejemplo, una transferencia: origen `DISPONIBLE`, destino
+`TRANSITO`; o la resolución de una devolución: origen `CUARENTENA`, destino
+`DISPONIBLE`) no puede representarse con una sola columna de estado — por eso
+`movimientos_inventario` guarda `estado_inventario` (el del lado destino, o el único
+estado si no hay destino) y `estado_inventario_origen` (el del lado origen, cuando
+corresponde) por separado. Sin esta distinción, una reconciliación que sumara ambos
+lados a la misma "cuenta" de estado arrastraría un error sistemático en cualquier
+operación que cruce estados.
+
+**Implementado**: `modules/inventario/reconciliacion.service.ts` reconstruye cada saldo
+con esta lógica (vía una consulta SQL con `FULL OUTER JOIN` entre lo calculado desde
+movimientos y lo registrado en `saldos_inventario`) y reporta cualquier diferencia,
+tanto "saldo con menos existencia de la que deberían mostrar los movimientos" como el
+caso inverso. Se expone como `GET /api/indicadores/reconciliacion` y como script de
+línea de comandos (`npm run reconciliar -- <rut-o-id-de-empresa>` desde `backend/`, con
+código de salida distinto de cero si encuentra diferencias, apto para un chequeo
+automatizado). Probado explícitamente forzando una alteración manual de
+`saldos_inventario` fuera del motor de movimientos y verificando que se detecta
+(`tests/reconciliacion.test.ts`).
+
+## 6. Períodos cerrados
+
+No se agregó una tabla dedicada: la fecha de cierre vive en `parametros`
+(`clave = "fecha_cierre_periodo"`, `valor` = fecha ISO), un parámetro más por empresa,
+consistente con cómo ya se modelan otros ajustes configurables. `crearOperacion` — el
+único punto de entrada para registrar cualquier operación de inventario — consulta este
+parámetro y rechaza una `fechaEfectiva` igual o anterior al cierre, salvo que el
+llamador pase explícitamente `permitirPeriodoCerrado: true` (algo que ningún flujo hace
+en este entregable). `definirFechaCierre` no permite retroceder un cierre ya
+establecido. Ver `modules/inventario/periodos.service.ts`.
+
+## 7. Multimoneda
+
+`CapaCosto` ya modelaba `moneda` y `tipoCambio` desde el diseño inicial; lo que faltaba
+era poblarlos. La regla implementada: **todo costo se convierte a la moneda de la
+empresa en el momento del ingreso** (recepción), nunca en el momento de reportar. Una
+línea de recepción puede venir facturada en una moneda distinta, con su tipo de cambio;
+`recepcion.service.ts` calcula `costoUnitarioBase = costoUnitarioFacturado × tipoCambio`
+y usa ese valor base para el movimiento de inventario y la capa de costo (que además
+guarda `moneda` y `tipoCambio` originales para trazabilidad), mientras que
+`recepcion_detalle.costoUnitario` conserva el valor tal como fue facturado, sin
+convertir — es el documento fuente, debe reflejar lo que llegó, no lo que se calculó.
+Si la moneda de la línea difiere de la de la empresa y no se informa un tipo de cambio,
+la recepción se rechaza: nunca se asume una tasa de 1:1 silenciosamente. Como
+consecuencia de convertir en el ingreso, los indicadores y tableros nunca mezclan
+monedas — todos ya están en la moneda base —, aunque no exista (todavía) una vista que
+muestre valores en una moneda de reporte distinta a la base de la empresa.

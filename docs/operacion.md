@@ -71,10 +71,20 @@ desarrollo descrito arriba.
 
 ## Qué hacer ante un incidente de datos
 
-- **Saldo sospechoso de estar mal**: nunca editarlo a mano. Reconstruir sumando
-  `movimientos_inventario` para esa combinación producto/ubicación/lote/serie/estado
-  (ver `docs/modelo-datos.md` §5) y comparar contra `saldos_inventario`; si difieren, es
-  un bug del motor de inventario y debe corregirse ahí, no parchando el dato.
+- **Saldo sospechoso de estar mal**: nunca editarlo a mano. Ejecutar
+  `npm run reconciliar -- <rut-o-id-de-empresa>` (desde `backend/`) o
+  `GET /api/indicadores/reconciliacion`, que reconstruyen cada saldo desde
+  `movimientos_inventario` (ver `docs/modelo-datos.md` §5) y reportan cualquier
+  diferencia con el valor calculado y el registrado; si difieren, es un bug del motor
+  de inventario y debe corregirse ahí, no parchando el dato. Se recomienda correr este
+  script periódicamente (p. ej. como parte de un cierre de período) y no solo cuando
+  ya hay sospecha de un problema.
+- **Cerrar un período contable**: `PUT /api/parametros/periodo-cierre` (rol
+  administrador) con la fecha de corte. A partir de ese momento, cualquier operación de
+  inventario con fecha efectiva igual o anterior queda bloqueada salvo autorización
+  explícita (que ningún flujo activa por sí solo en este entregable); el cierre no se
+  puede retroceder. Antes de cerrar, correr la reconciliación de saldos del punto
+  anterior para partir el nuevo período sin arrastrar diferencias sin explicar.
 - **Carga de datos a medio ejecutar tras una caída del servidor**: la ejecución ocurre
   dentro de una transacción de Prisma (`$transaction`); si el proceso muere a mitad de
   camino, PostgreSQL revierte la transacción completa y la carga queda en estado

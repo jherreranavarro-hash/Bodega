@@ -66,19 +66,40 @@ es a pedido (botón "Detectar alertas ahora"), no una tarea programada. Cubierto
 pruebas (`tests/alertas.test.ts`) y por el smoke test de UI (detectar → convertir en
 solicitud).
 
-## Fase 3 — Pendiente explícito de alta prioridad
-Estas son las brechas más importantes respecto del alcance completo del encargo
-(sección 2). Se documentan aquí en vez de darlas por hechas:
+## Fase 3 — Pronósticos, integridad de datos y multimoneda (completada en esta iteración)
+Las cuatro brechas de alta prioridad detectadas tras la fase 2 quedaron resueltas:
 
-1. **Pronósticos y escenarios de simulación** (`pronosticos`, `escenarios` en el
-   modelo): sin cálculo implementado. No se debe mostrar una precisión que no existe —
-   por eso no hay ningún endpoint que "invente" un pronóstico todavía.
-2. **Script de reconciliación de saldos** contra el historial de movimientos (ver
-   `docs/modelo-datos.md` §5).
-3. **Manejo de períodos cerrados** y de registros con fecha efectiva atrasada más allá
-   de la separación de campos ya existente en el modelo.
-4. **Multimoneda real**: el modelo guarda `moneda`/`tipo_cambio` en capas de costo, pero
-   no hay conversión ni consolidación multimoneda en los indicadores.
+1. **Pronósticos y escenarios de simulación** (`modules/analitica`): demanda real
+   acumulada por día desde solicitudes y despachos (nunca inferida del saldo);
+   pronóstico por promedio móvil que exige un mínimo de historia y declara la
+   insuficiencia explícitamente en vez de inventar una cifra (caso de aceptación 14 del
+   encargo), con *backtesting* contra una regla simple sobre el propio historial y
+   limitaciones siempre expuestas. Simulación de escenarios (demanda, plazo de
+   proveedor, stock de seguridad) que nunca toca los parámetros reales y siempre se
+   etiqueta como simulación. 5 pruebas (`tests/pronosticos.test.ts`).
+2. **Reconciliación de saldos** (`modules/inventario/reconciliacion.service.ts`,
+   `GET /api/indicadores/reconciliacion`, `npm run reconciliar` como script de línea de
+   comandos): reconstruye cada saldo desde `movimientos_inventario` — incluyendo el
+   caso de un movimiento con estados distintos en origen y destino, como una
+   transferencia, que ahora se registra con `estado_inventario_origen` propio además de
+   `estado_inventario` (migración `20260907190000_movimiento_estado_origen`) — y
+   reporta cualquier desviación frente a `saldos_inventario`. 3 pruebas, incluyendo una
+   que fuerza una alteración manual de la base y confirma que se detecta
+   (`tests/reconciliacion.test.ts`).
+3. **Períodos cerrados** (`modules/inventario/periodos.service.ts`,
+   `GET/PUT /api/parametros/periodo-cierre`): toda operación de inventario pasa por
+   `crearOperacion`, que rechaza una fecha efectiva igual o anterior al cierre
+   configurado salvo autorización explícita (que ningún flujo activa por sí solo); el
+   cierre no se puede retroceder. 4 pruebas (`tests/periodos.test.ts`).
+4. **Multimoneda en recepciones** (`recepcion.service.ts`): una línea puede facturarse
+   en una moneda distinta a la de la empresa con su tipo de cambio; el documento
+   conserva el costo tal como fue facturado, mientras que el movimiento y la capa de
+   costo quedan valorizados en la moneda base, guardando moneda original y tipo de
+   cambio para trazabilidad (sección 10 del encargo); sin tipo de cambio y con moneda
+   distinta, se rechaza explícitamente. 3 pruebas (`tests/multimoneda.test.ts`). La
+   consolidación multimoneda en tableros/reportes queda pendiente (fase 4) — hoy no
+   mezcla monedas porque todo se convierte a la moneda base desde el ingreso, pero no
+   hay una vista en una moneda de reporte distinta a la base.
 
 ## Fase 4 — Endurecimiento operativo (pendiente)
 - Almacenamiento de evidencias en un backend de archivos real (hoy `adjuntos` solo
@@ -90,20 +111,19 @@ Estas son las brechas más importantes respecto del alcance completo del encargo
   cuotas por usuario).
 - Panel de administración de roles/permisos en la UI.
 
-## Fase 5 — Analítica avanzada y asistente de IA (pendiente, fuera de alcance de esta
-iteración)
-Bandeja de decisiones completa, pronósticos con evaluación contra una regla simple,
-simulación de escenarios (aumento de demanda, atraso de proveedor, redistribución entre
-bodegas), y el asistente de lenguaje natural descrito en la sección 13 del encargo, con
-acceso acotado a los mismos indicadores/documentos ya trazables — nunca con acceso
-irrestricto a la base ni ejecución de operaciones sin las aprobaciones del sistema.
+## Fase 5 — Asistente de IA (pendiente, fuera de alcance de esta iteración)
+El asistente de lenguaje natural descrito en la sección 13 del encargo, con acceso
+acotado a los mismos indicadores/documentos ya trazables (incluyendo pronósticos y sus
+limitaciones, ya implementados en la fase 3) — nunca con acceso irrestricto a la base ni
+ejecución de operaciones sin las aprobaciones del sistema.
 
 ## Supuestos explícitos tomados (parámetros, no reglas fijas)
 
 | Supuesto | Dónde se configuró | Cómo cambiarlo |
 |---|---|---|
 | Stock negativo no permitido por defecto | `registrarMovimiento({ permitirNegativo: false })` como default | Parámetro por operación; no hay toggle global todavía — se deja intencionalmente restrictivo |
-| Solicitudes de salida y órdenes de compra se crean ya "aprobadas" en esta demo | `solicitudes.routes.ts`, `compras.routes.ts` | Cambiar el estado inicial a `BORRADOR`/`PENDIENTE_APROBACION` y agregar el endpoint de aprobación correspondiente (el estado ya existe en el enum) |
+| Solicitudes de salida y órdenes de compra creadas directamente (sin pasar por una solicitud de compra) nacen ya "aprobadas" en esta demo | `salidas.routes.ts`, `compras.routes.ts` (endpoint `POST /ordenes`) | Cambiar el estado inicial a `BORRADOR`/`PENDIENTE_APROBACION` y agregar el endpoint de aprobación correspondiente (el estado ya existe en el enum). Nótese que las **solicitudes de compra** (`POST /solicitudes`) ya nacen `PENDIENTE_APROBACION` desde la fase 2.3 — este supuesto solo aplica a los dos casos indicados |
+| Ningún flujo pasa `permitirPeriodoCerrado` | `crearOperacion` (`inventario.service.ts`) | Se deja así intencionalmente: reabrir un período cerrado debe ser una decisión explícita de un flujo de corrección futuro, no un parámetro que cualquier operación pueda activar |
 | Conteo ciego oculta `cantidadEsperada` mientras el conteo está `EN_PROCESO` | `ajustes.routes.ts` | Configurable por conteo vía el campo `conteoCiego` |
 | Ajuste requiere motivo; evidencia solo si el motivo la exige | `motivos.requiereEvidencia` | Editable por mantenedor de motivos |
 | Método de valorización por defecto: promedio ponderado | `Producto.metodoValorizacion` | Editable por producto; **no** hay migración guiada para cambiar el método con inventario existente (queda pendiente, sección 10 del encargo lo exige explícitamente como control) |

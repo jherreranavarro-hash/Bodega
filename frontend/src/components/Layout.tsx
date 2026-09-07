@@ -12,6 +12,7 @@ const ENLACES = [
   { ruta: "/transferencias", etiqueta: "Transferencias" },
   { ruta: "/devoluciones", etiqueta: "Devoluciones" },
   { ruta: "/ajustes", etiqueta: "Conteos y Ajustes" },
+  { ruta: "/pronosticos", etiqueta: "Pronósticos y Escenarios" },
 ];
 
 export function Layout() {

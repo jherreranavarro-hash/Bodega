@@ -177,6 +177,23 @@ await paso("validar, aprobar y ejecutar la carga desde la UI", async () => {
   await page.waitForSelector(`tr:has-text("${nombreArchivo}") >> text=Completada`, { timeout: 10000 });
 });
 
+await paso("pronósticos: declara datos insuficientes sin inventar cifra, y simula un escenario real", async () => {
+  await page.click('a:has-text("Pronósticos y Escenarios")');
+  await page.waitForSelector("text=Pronósticos y escenarios de simulación");
+
+  await page.selectOption('div.tarjeta.grid-form:has-text("Calcular pronóstico") select >> nth=0', { label: "BOD-CENTRAL" });
+  await page.selectOption('div.tarjeta.grid-form:has-text("Calcular pronóstico") select >> nth=1', { label: "PROD-001" });
+  await page.click('div.tarjeta.grid-form:has-text("Calcular pronóstico") button:has-text("Calcular")');
+  await page.waitForSelector("text=Datos insuficientes", { timeout: 10000 });
+
+  const formEscenario = page.locator('div.tarjeta.grid-form:has-text("Simular un escenario")');
+  await formEscenario.locator('input').first().fill(`Escenario smoke ${Date.now()}`);
+  await formEscenario.locator("select").nth(0).selectOption({ label: "BOD-CENTRAL" });
+  await formEscenario.locator("select").nth(1).selectOption({ label: "PROD-001" });
+  await formEscenario.getByRole("button", { name: "Simular" }).click();
+  await page.waitForSelector("text=Punto reposición actual", { timeout: 10000 });
+});
+
 if (errores.length > 0) {
   console.log("Errores de consola detectados:", errores);
 }

@@ -212,6 +212,8 @@ const recepcionSchema = z.object({
         cantidadAceptada: z.number().nonnegative(),
         cantidadRechazada: z.number().nonnegative().optional(),
         costoUnitario: z.number().nonnegative(),
+        moneda: z.string().optional(),
+        tipoCambio: z.number().positive().optional(),
         motivoRechazoId: z.string().uuid().optional(),
       })
     )

@@ -68,13 +68,14 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 | Centro de cargas de datos | Implementado (entidades PRODUCTOS e INVENTARIO_INICIAL) | `modules/cargas` |
 | Compras y abastecimiento | Implementado (solicitud con aprobación propia → orden de compra → recepción) | `modules/compras` |
 | Recepción y almacenamiento | Implementado | `modules/recepciones` |
-| Inventario y trazabilidad | Implementado (motor central) | `modules/inventario` |
+| Inventario y trazabilidad | Implementado (motor central + reconciliación de saldos + períodos cerrados) | `modules/inventario` |
 | Solicitudes y reservas | Implementado | `modules/salidas` |
 | Preparación y despacho | Implementado (preparación opcional, exigida como `LISTA` cuando el despacho la referencia) | `modules/preparaciones`, `modules/despachos` |
 | Transferencias | Implementado | `modules/transferencias` |
 | Devoluciones y excepciones | Implementado (ingreso a cuarentena → resolución reingreso/cuarentena/baja) | `modules/devoluciones` |
 | Conteos y ajustes | Implementado | `modules/ajustes` |
-| Inteligencia de inventario | Indicadores + bandeja de decisiones implementados; pronósticos/escenarios pendientes | `modules/indicadores`, `modules/alertas` |
+| Inteligencia de inventario | Implementado: indicadores, bandeja de decisiones, pronósticos y escenarios | `modules/indicadores`, `modules/alertas`, `modules/analitica` |
+| Costos y valorización | Implementado: FIFO/promedio ponderado, multimoneda en recepciones | `modules/recepciones`, `modules/despachos` |
 | Reportes e integraciones | Exportación CSV de errores de carga; sin integraciones externas | `modules/cargas` |
 | Asistente de IA | No implementado (fuera de alcance de esta iteración) | — |
 

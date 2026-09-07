@@ -74,9 +74,38 @@ iniciado en este entregable).
 ## Inventario y trazabilidad — Implementado (motor central)
 - `calcularDisponibilidad`, `registrarMovimiento`, `crearReserva`, control de
   concurrencia con `SELECT ... FOR UPDATE`.
+- **Reconciliación de saldos** (`GET /api/indicadores/reconciliacion`, o
+  `npm run reconciliar -- <rut>` desde `backend/`): reconstruye cada saldo desde
+  `movimientos_inventario` (incluyendo el estado propio de cada lado de un movimiento con
+  origen y destino distintos, como una transferencia) y reporta cualquier desviación
+  frente a lo registrado en `saldos_inventario`. Es el control independiente que
+  detecta si esa proyección de lectura se desvió alguna vez de su fuente de verdad.
+- **Períodos cerrados** (`GET/PUT /api/parametros/periodo-cierre`, rol administrador):
+  toda operación de inventario pasa por `crearOperacion`, que rechaza una fecha
+  efectiva igual o anterior a la fecha de cierre configurada, salvo que el propio
+  llamador pase explícitamente `permitirPeriodoCerrado` — ningún flujo lo activa por
+  sí solo en este entregable. El cierre no se puede retroceder una vez establecido.
 - Pendiente: consulta de "vista 360°" de un producto (existencias + reservas +
   movimientos + compras pendientes + vencimientos + costos + alertas en una sola
-  pantalla) — hoy esa información existe pero repartida en varias pantallas/endpoints.
+  pantalla) — hoy esa información existe pero repartida en varias pantallas/endpoints;
+  una UI dedicada para configurar el cierre de período (hoy es API/administración).
+
+## Costos y valorización — Implementado
+- Promedio ponderado o FIFO por producto (`Producto.metodoValorizacion`); el despacho
+  aplica el método correspondiente y, si no hay capas de costo suficientes para cubrir
+  la cantidad, el costo de lo no cubierto queda **pendiente** en vez de asumirse cero.
+- **Multimoneda en recepciones**: una línea de recepción puede facturarse en una moneda
+  distinta a la de la empresa, indicando el tipo de cambio aplicado; el documento de
+  recepción conserva el costo tal como fue facturado (moneda original), mientras que el
+  movimiento de inventario y la capa de costo quedan valorizados en la moneda base de
+  la empresa — la capa de costo además guarda `moneda` y `tipoCambio` para trazabilidad
+  (sección 10 del encargo). Falta el tipo de cambio y la moneda difiere de la de la
+  empresa → la recepción se rechaza explícitamente, nunca asume una tasa de 1:1.
+- Pendiente: conversión/consolidación multimoneda en los indicadores y tableros (hoy
+  todo costo ya llega convertido a la moneda base desde el ingreso, por lo que los
+  indicadores no mezclan monedas, pero no hay una vista que muestre el valor en una
+  moneda de reporte distinta a la base); traslados internos entre bodegas de distinta
+  empresa (no aplica en este modelo: una transferencia siempre es intraempresa).
 
 ## Solicitudes y reservas — Implementado
 - `/api/salidas/solicitudes`, `/api/salidas/reservas`. FEFO opcional
@@ -128,7 +157,7 @@ iniciado en este entregable).
 - Pendiente: bloqueo de movimientos durante el conteo (hoy es responsabilidad operativa,
   no forzada por el sistema) o conciliación de operaciones posteriores al conteo.
 
-## Inteligencia de inventario — Parcial (bandeja de decisiones implementada)
+## Inteligencia de inventario — Implementado
 - Implementado: stock bajo punto de reposición, sobrestock, vencimientos próximos,
   disponibilidad por producto/bodega, exactitud de inventario por conteo.
 - **Bandeja de decisiones implementada** (`modules/alertas`, pantalla "Centro de
@@ -146,12 +175,27 @@ iniciado en este entregable).
 - La generación de alertas es una acción explícita a pedido (botón "Detectar alertas
   ahora"), no un proceso automático en segundo plano — documentado como supuesto en
   `plan-implementacion.md`.
-- **Modelo de datos, sin cálculo automático**: `demanda_registrada`, `pronosticos`,
-  `escenarios` — las tablas existen para soportar el diseño, pero el cálculo de
-  pronósticos y la simulación de escenarios **no están implementados**.
+- **Pronósticos implementados** (`modules/analitica`, pantalla "Pronósticos y
+  Escenarios"): la demanda real (`demanda_registrada`) se acumula por día desde hechos
+  concretos — lo solicitado en cada solicitud de salida y lo efectivamente despachado —,
+  nunca inferida desde el saldo. `POST /api/analitica/pronosticos` calcula un promedio
+  móvil sobre una ventana de 30 días, exigiendo al menos 7 días de historia; si no hay
+  suficiente historia, **declara la insuficiencia explícitamente en vez de inventar una
+  cifra** (caso de aceptación 14 del encargo). Cuando sí calcula, hace *backtesting* del
+  propio método contra una regla simple (repetir el valor del día anterior) sobre el
+  mismo historial, y siempre expone sus limitaciones en texto (tamaño de la muestra,
+  que la demanda registrada incluye lo no atendido, etc.).
+- **Escenarios de simulación implementados**: `POST /api/analitica/escenarios` simula
+  el efecto de un aumento de demanda, un atraso de proveedor y/o un cambio en el stock
+  de seguridad sobre el punto de reposición y la cobertura estimada, sin tocar los
+  parámetros reales ni generar ninguna operación; el resultado queda etiquetado como
+  simulación (`esSimulacion: true`) y siempre junto a sus supuestos, para no confundirse
+  con datos reales.
 - Pendiente: alertas de tipo `PROVEEDOR_INCUMPLIMIENTO` y `DATO_INCOMPLETO` (el modelo
   las contempla; no hay una fuente de datos implementada que las genere todavía);
-  programar la generación de alertas como tarea periódica en vez de manual.
+  programar la generación de alertas como tarea periódica en vez de manual; métodos de
+  pronóstico adicionales (estacionalidad, suavizado exponencial) más allá del promedio
+  móvil con evaluación simple.
 
 ## Reportes e integraciones — Parcial
 - Exportación CSV de errores de carga.

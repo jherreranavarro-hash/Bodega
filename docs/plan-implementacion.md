@@ -182,6 +182,7 @@ de datos):
 | `cantidad_enviada` genera una recepción real de inventario; `cantidad_solicitada`/`cantidad_colectada` son solo informativas | Que ninguna cantidad afecte stock | El usuario confirmó que "cantidad enviada = ingreso real a bodega" |
 | El porcentaje de margen se aplica sobre el `valor`/`valor_en_usd` del Excel (el valor de referencia más reciente) | Aplicarlo sobre otro campo de costo del sistema | Confirmado por el usuario como la base del cálculo |
 | `Valor` (sin USD) se interpreta como pesos chilenos (CLP) | Otra moneda | Confirmado por el usuario |
+| El código interno del producto es `Código` + `Código ML` combinados (`"<codigo>::<codigo_ml>"`), no `Código` solo | Usar `Código` solo como código de producto | Verificado con un archivo real de 619 filas: el mismo `Código` se repite hasta 7 veces con título/peso/valor completamente distintos (ej. `1141840600-50` cubre un vaso térmico, un mate y otro mate, todos productos distintos) — `Código` por sí solo habría mezclado productos no relacionados bajo un mismo registro. `Código`+`Código ML` juntos sí fueron 100% únicos en ese archivo. Confirmado por el usuario: "cada fila es su propia unidad/producto". |
 
 Supuestos adicionales, no confirmados explícitamente por tratarse de detalles de
 implementación no cubiertos en las preguntas anteriores — documentados aquí en vez de
@@ -200,6 +201,15 @@ asumidos en silencio:
   (`LlegadaProducto.tituloOriginal`) pero el nombre curado del producto no se toca —
   para no dejar que un título ruidoso de una publicación reemplace un nombre ya
   ordenado por el equipo.
+- **`Código ML` no es único** (ni siquiera dentro de un mismo `Código`): una misma
+  publicación de Mercado Libre agrupa varias unidades físicas distintas. `Producto` lo
+  guarda indexado, pero no como restricción `UNIQUE`.
+- **Los valores numéricos admiten formato moneda simple** (`"$ 0"`, con símbolo y
+  espacio, tal como los exporta Mercado Libre): se les quita el símbolo `$` y los
+  espacios antes de convertir a número. **No** se interpretan separadores de miles —
+  un valor como `"1.234"` se lee tal cual (mil doscientos treinta y cuatro), nunca como
+  `1,234` en formato anglosajón ni se reinterpreta como `1234` en formato chileno,
+  para no repetir el bug real que esto causó al confundir `"16.5"` con `"165"`.
 - **Las mercancías llegan directamente a estado `DISPONIBLE`** (no a cuarentena, a
   diferencia de las devoluciones): se asumió que la llegada de mercadería para la venta
   no necesita inspección previa, dado que el objetivo declarado es "poder poner los

@@ -347,7 +347,10 @@ model Producto {
   codigoBarras          String?
   // Origen del producto cuando llega vía el centro de cargas "LLEGADA_PRODUCTOS"
   // (mercadería de Mercado Libre / liquidación). Ninguno es obligatorio: un
-  // producto creado por otra vía simplemente no los tiene.
+  // producto creado por otra vía simplemente no los tiene. codigoMercadoLibre
+  // NO es único: una misma publicación de Mercado Libre agrupa varias
+  // unidades/pallets con "código" (SKU interno) distinto — confirmado con
+  // datos reales de un archivo de liquidación.
   codigoMercadoLibre      String?   @map("codigo_mercado_libre")
   codigoOriginalProveedor String?   @map("codigo_original_proveedor")
   grupo                   String?
@@ -397,8 +400,8 @@ model Producto {
   precioVenta           PrecioVenta?
 
   @@unique([empresaId, codigo])
-  @@unique([empresaId, codigoMercadoLibre])
   @@index([empresaId, codigoBarras])
+  @@index([empresaId, codigoMercadoLibre])
   @@map("productos")
 }
 

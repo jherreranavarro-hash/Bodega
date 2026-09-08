@@ -41,6 +41,14 @@ async function solicitud<T>(metodo: string, ruta: string, cuerpo?: unknown, opci
 
   if (!respuesta.ok) {
     const mensaje = typeof datos === "object" && datos && "error" in datos ? String((datos as { error: unknown }).error) : "Error inesperado";
+    if (respuesta.status === 401 && ruta !== "/auth/login") {
+      // Sesión vencida o token inválido: no dejar a la persona varada en una
+      // pantalla con un error suelto, mandarla de vuelta al login.
+      borrarToken();
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
     throw new ErrorApi(respuesta.status, mensaje, datos);
   }
   return datos as T;

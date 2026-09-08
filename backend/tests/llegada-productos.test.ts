@@ -32,7 +32,7 @@ describe("Llegada de productos (Mercado Libre / liquidación): crea producto nue
     });
     expect(carga.estado).toBe("EJECUTADA");
 
-    const producto = await prisma.producto.findFirstOrThrow({ where: { empresaId: e.empresa.id, codigo: "PROD-ML-1" } });
+    const producto = await prisma.producto.findFirstOrThrow({ where: { empresaId: e.empresa.id, codigo: "PROD-ML-1::MLC1" } });
     expect(producto.nombre).toBe("Audífonos Bluetooth");
     expect(producto.codigoMercadoLibre).toBe("MLC1");
     expect(producto.codigoOriginalProveedor).toBe("ORIG-1");
@@ -82,7 +82,10 @@ describe("Llegada de productos (Mercado Libre / liquidación): crea producto nue
 
   it("actualiza un producto ya existente sin sobrescribir su nombre curado", async () => {
     const e = await crearEscenario();
-    await prisma.producto.update({ where: { id: e.producto.id }, data: { codigo: "PROD-ML-3" } });
+    // El código interno del producto es el compuesto Código::CódigoML, tal
+    // como lo genera esta misma carga — simula que este producto ya llegó
+    // una vez antes.
+    await prisma.producto.update({ where: { id: e.producto.id }, data: { codigo: "PROD-ML-3::MLC3" } });
 
     const contenido = Buffer.from(ENCABEZADOS + `NuevoGrupo,PROD-ML-3,MLC3,,Título ML ignorado,Nuevo,Cerrado,,C,1,1,1,0.1,5000,5.5\n`);
     const carga = await ejecutarFlujoCompleto({
@@ -155,9 +158,37 @@ describe("Llegada de productos (Mercado Libre / liquidación): crea producto nue
     });
     expect(carga.estado).toBe("EJECUTADA");
 
-    const producto = await prisma.producto.findFirstOrThrow({ where: { empresaId: e.empresa.id, codigo: "PROD-ML-XLSX" } });
+    const producto = await prisma.producto.findFirstOrThrow({ where: { empresaId: e.empresa.id, codigo: "PROD-ML-XLSX::MLCX1" } });
     expect(producto.nombre).toBe("Freidora de Aire");
     const disponibilidad = await calcularDisponibilidad(producto.id, e.bodega.id);
     expect(disponibilidad.stockFisicoTotal.toString()).toBe("2");
+  });
+
+  it("un mismo Código con distinto Código ML crea dos productos separados, no los mezcla (caso real de liquidación)", async () => {
+    // Verificado con un archivo real: el mismo "Código" puede repetirse con
+    // título, peso y valor totalmente distintos en cada fila — "Código" solo
+    // no identifica un producto. Código+CódigoML combinados sí.
+    const e = await crearEscenario();
+    const contenido = Buffer.from(
+      ENCABEZADOS +
+        `,1141840600-50,WQQX30117,,Quencher H2.0 Adventure Stone,Usado,OK,OK,A,3,3,0,0.8,49990,55\n` +
+        `,1141840600-50,GHCX10845,,Mate Térmico Stanley Slim,Usado,OK,OK,A,1,1,0,0.22,25990,29\n`
+    );
+
+    const carga = await ejecutarFlujoCompleto({
+      empresaId: e.empresa.id,
+      entidad: "LLEGADA_PRODUCTOS",
+      modo: "CREACION_Y_ACTUALIZACION",
+      nombreArchivo: "lote-real.csv",
+      contenido,
+      usuarioId: e.usuario.id,
+      contexto: { bodegaDestinoId: e.bodega.id },
+    });
+    expect(carga.estado).toBe("EJECUTADA");
+
+    const productos = await prisma.producto.findMany({ where: { empresaId: e.empresa.id, codigo: { startsWith: "1141840600-50" } } });
+    expect(productos).toHaveLength(2);
+    const nombres = productos.map((p) => p.nombre).sort();
+    expect(nombres).toEqual(["Mate Térmico Stanley Slim", "Quencher H2.0 Adventure Stone"]);
   });
 });

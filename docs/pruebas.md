@@ -24,7 +24,7 @@ residuales de una corrida anterior):
 ✓ tests/reconciliacion.test.ts (3 tests)
 ✓ tests/preparaciones.test.ts (3 tests)
 ✓ tests/administracion.test.ts (4 tests)
-✓ tests/llegada-productos.test.ts (6 tests)
+✓ tests/llegada-productos.test.ts (7 tests)
 ✓ tests/ajustes.test.ts (1 test)
 ✓ tests/periodos.test.ts (4 tests)
 ✓ tests/multimoneda.test.ts (3 tests)
@@ -33,7 +33,7 @@ residuales de una corrida anterior):
 ✓ tests/adjuntos.test.ts (4 tests)
 
 Test Files  16 passed (16)
-     Tests  70 passed (70)
+     Tests  71 passed (71)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -124,7 +124,9 @@ Adicionalmente se prueba (más allá del mínimo pedido):
   rechaza un producto nuevo sin título; exige la bodega de destino antes de aceptar el
   archivo; acepta el mismo contenido en formato `.xlsx` con los encabezados reales en
   español (Grupo, Código, Código ML, etc.), probando que la normalización de
-  encabezados funciona igual que con CSV.
+  encabezados funciona igual que con CSV; y —caso encontrado con un archivo real de
+  liquidación de 619 filas— un mismo `Código` con distinto `Código ML` crea dos
+  productos separados en vez de mezclar sus datos.
 - **Precios de venta** (`tests/precios.test.ts`): modo fijo calcula exactamente el
   precio indicado; modo porcentaje calcula sobre el valor de referencia de la última
   llegada; sin valor de referencia todavía, el precio calculado queda vacío (nunca

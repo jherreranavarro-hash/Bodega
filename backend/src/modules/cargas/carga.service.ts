@@ -544,7 +544,13 @@ const UNIDAD_POR_DEFECTO_LLEGADA = "UN";
 function numeroOpcional(texto: string | undefined): number | undefined {
   const limpio = texto?.trim();
   if (!limpio) return undefined;
-  const n = Number(limpio);
+  // Admite valores con formato moneda tal como los exporta Mercado Libre
+  // (ej. "$ 0"): solo quita el símbolo de moneda y espacios, nunca separadores
+  // de miles/decimales (eso ya causó un bug real al confundir "16.5" con
+  // "1.234" en formato chileno).
+  const sinFormato = limpio.replace(/[$\s]/g, "");
+  if (!sinFormato) return undefined;
+  const n = Number(sinFormato);
   return Number.isFinite(n) ? n : undefined;
 }
 
@@ -607,12 +613,20 @@ registrarManejador("LLEGADA_PRODUCTOS", {
       return { accion: "RECHAZAR", errores };
     }
 
-    const existente = await prisma.producto.findFirst({ where: { empresaId: ctx.empresaId, codigo: codigo! } });
+    // Cada fila es su propia unidad/producto: "Código" solo no identifica un
+    // producto de forma confiable (verificado con un archivo real de
+    // liquidación, donde el mismo "Código" se repite con títulos, pesos y
+    // valores completamente distintos). "Código" + "Código ML" combinados sí
+    // son únicos fila a fila, y es lo que se usa como código interno del
+    // producto — decisión confirmada explícitamente antes de este cambio.
+    const codigoProducto = codigoMl ? `${codigo}::${codigoMl}` : codigo!;
+
+    const existente = await prisma.producto.findFirst({ where: { empresaId: ctx.empresaId, codigo: codigoProducto } });
     if (existente && ctx.modo === ModoCarga.SOLO_CREACION) {
-      return { accion: "RECHAZAR", errores: [{ severidad: "BLOQUEANTE", mensaje: `El producto ${codigo} ya existe (modo solo creación)` }] };
+      return { accion: "RECHAZAR", errores: [{ severidad: "BLOQUEANTE", mensaje: `El producto ${codigoProducto} ya existe (modo solo creación)` }] };
     }
     if (!existente && ctx.modo === ModoCarga.SOLO_ACTUALIZACION) {
-      return { accion: "RECHAZAR", errores: [{ severidad: "BLOQUEANTE", mensaje: `El producto ${codigo} no existe (modo solo actualización)` }] };
+      return { accion: "RECHAZAR", errores: [{ severidad: "BLOQUEANTE", mensaje: `El producto ${codigoProducto} no existe (modo solo actualización)` }] };
     }
 
     let unidadBaseId: string | undefined;
@@ -620,7 +634,7 @@ registrarManejador("LLEGADA_PRODUCTOS", {
       if (!titulo) {
         return {
           accion: "RECHAZAR",
-          errores: [{ campo: "titulo", severidad: "BLOQUEANTE", mensaje: `El producto ${codigo} no existe: el título es obligatorio para crearlo` }],
+          errores: [{ campo: "titulo", severidad: "BLOQUEANTE", mensaje: `El producto ${codigoProducto} no existe: el título es obligatorio para crearlo` }],
         };
       }
       const unidad = await prisma.unidadMedida.findFirst({ where: { empresaId: ctx.empresaId, codigo: UNIDAD_POR_DEFECTO_LLEGADA } });
@@ -639,7 +653,7 @@ registrarManejador("LLEGADA_PRODUCTOS", {
       propuesta: {
         productoId: existente?.id,
         unidadBaseId,
-        codigo,
+        codigo: codigoProducto,
         codigoMl,
         codigoOriginal,
         titulo,

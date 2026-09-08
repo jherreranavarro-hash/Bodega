@@ -124,8 +124,12 @@ generó si `cantidad_enviada > 0`. `precios_venta` tiene una fila **por producto
 que cambia el modo, el margen/precio fijo, o llega un nuevo `valor_referencia_clp` desde
 una llegada — nunca se computa "al vuelo" en el momento de leer.
 
-`Producto` ganó tres columnas opcionales para esta fase: `codigo_mercado_libre` (único
-por empresa), `codigo_original_proveedor` y `grupo`.
+`Producto` ganó tres columnas opcionales para esta fase: `codigo_mercado_libre`
+(indexado, **no** único — una misma publicación de Mercado Libre agrupa varias
+unidades físicas distintas, confirmado con datos reales), `codigo_original_proveedor`
+y `grupo`. El código interno real del producto (`Producto.codigo`, único por empresa)
+que arma el manejador `LLEGADA_PRODUCTOS` es la combinación `codigo` + `codigo_ml` del
+Excel (`"<codigo>::<codigo_ml>"`), no `codigo` solo — ver `docs/centro-de-cargas.md`.
 
 ## 3. Reglas de integridad transversales
 
@@ -158,6 +162,7 @@ por empresa), `codigo_original_proveedor` y `grupo`.
 | `20260907180000_demanda_unica_por_dia` | Índice único `(producto_id, bodega_id, fecha)` en `demanda_registrada`, para poder acumular la demanda del día con `upsert` sin duplicar filas |
 | `20260907190000_movimiento_estado_origen` | Agrega `estado_inventario_origen` a `movimientos_inventario` (ver §5) |
 | `20260908143228_llegadas_producto_y_precios` | Nuevas tablas `llegadas_producto` y `precios_venta`; nuevas columnas en `productos` (`codigo_mercado_libre`, `codigo_original_proveedor`, `grupo`); `cargas_datos.contexto` (JSON) |
+| `20260908160111_codigo_ml_no_unico` | Corrige `productos.codigo_mercado_libre`: de `UNIQUE` a índice simple (no es único, ver §2) |
 
 Ejecutar `npm run prisma:migrate` (desarrollo) o `npm run prisma:deploy` (aplicar en un
 entorno existente sin generar nuevas migraciones) desde `backend/`.

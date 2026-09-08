@@ -55,8 +55,8 @@ hace falta re-formatear un Excel real antes de subirlo.
 | Campo | Obligatorio | Formato | Observación |
 |---|---|---|---|
 | `grupo` | No | texto | Se guarda en el producto (`Producto.grupo`) |
-| `codigo` | Sí | texto | Clave de negocio; si no existe, **crea** el producto (a diferencia de `INVENTARIO_INICIAL`, aquí sí se espera mercadería nueva) |
-| `codigo_ml` | No | texto | Código de la publicación en Mercado Libre (`Producto.codigoMercadoLibre`, único por empresa) |
+| `codigo` | Sí | texto | **No es, por sí solo, la clave de negocio del producto** — ver nota abajo |
+| `codigo_ml` | No | texto | Código de la publicación en Mercado Libre (`Producto.codigoMercadoLibre`). **No es único**: una misma publicación puede agrupar varias unidades físicas distintas |
 | `codigo_original` | No | texto | Código del proveedor/origen (`Producto.codigoOriginalProveedor`) |
 | `titulo` | Solo si el producto no existe | texto | Se usa como `Producto.nombre` al crear; si el producto **ya existe**, no se sobrescribe su nombre (se guarda igual como snapshot en `LlegadaProducto.tituloOriginal`) |
 | `condicion`, `status`, `sub_status`, `grade` | No | texto libre | Informativos, snapshot de esta llegada (`llegadas_producto`) |
@@ -65,6 +65,21 @@ hace falta re-formatear un Excel real antes de subirlo.
 | `peso` | No | decimal ≥ 0 | Informativo |
 | `valor` | No | decimal ≥ 0 | Valor **unitario** en pesos (CLP); si falta y `cantidad_enviada > 0`, el costo del movimiento queda **pendiente** (igual criterio que `costo_unitario` en `INVENTARIO_INICIAL`); además alimenta el valor de referencia del mantenedor de precios |
 | `valor_en_usd` | No | decimal ≥ 0 | Solo referencial (no se usa para costear el inventario, que siempre queda en la moneda base) |
+
+> **Identidad del producto — `codigo` + `codigo_ml` combinados**: verificado con un
+> archivo real de liquidación (619 filas), `codigo` por sí solo **no** identifica un
+> producto de forma confiable — el mismo `codigo` puede repetirse hasta 7 veces con
+> título, peso y valor completamente distintos (son unidades/pallets distintos dentro
+> de un mismo lote de descarte). El código interno real del producto
+> (`Producto.codigo`) es la combinación `"<codigo>::<codigo_ml>"` (o solo `codigo` si
+> la fila no trae `codigo_ml`) — verificado como único fila a fila en ese archivo.
+> Confirmado explícitamente por el usuario: "cada fila es su propia unidad/producto".
+>
+> Los campos numéricos (`peso`, `valor`, `valor_en_usd`, cantidades) admiten un formato
+> moneda simple como `"$ 0"` (símbolo y espacio, tal como los exporta Mercado Libre): se
+> les quita el `$` y los espacios antes de convertir a número, pero **nunca** se
+> interpretan separadores de miles (un valor como `"16.5"` siempre es dieciséis coma
+> cinco, jamás mil seiscientos cincuenta).
 
 Esta entidad requiere además un parámetro que no viene en el archivo: la **bodega de
 destino**, enviada en el campo `contexto` del formulario (`{"bodegaDestinoId": "..."}"`),

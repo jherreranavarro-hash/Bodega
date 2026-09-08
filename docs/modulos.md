@@ -27,7 +27,13 @@ iniciado en este entregable).
 
 ## Mantenedores — Implementado (subconjunto priorizado)
 - Productos (`/api/productos`): CRUD, activar/desactivar, búsqueda por código/nombre/
-  código de barras, filtro por activo/categoría.
+  código de barras, filtro por activo/categoría. El listado también muestra Grupo,
+  Condición, Status, Sub Status y Grade de la **última llegada** de cada producto (los
+  mismos campos del Excel de `LLEGADA_PRODUCTOS`, ver `docs/plan-implementacion.md` fase
+  6) con filtros por cada uno (`GET /api/productos/filtros/llegada` entrega las opciones
+  reales declaradas en las llegadas de la empresa). A pedido explícito del usuario: son
+  filtros/columnas de lectura sobre el historial de llegadas, no columnas propias de
+  `Producto` — un producto sin llegadas nunca aparece bajo estos filtros y muestra "—".
 - Bodegas y ubicaciones (`/api/bodegas`, `/api/ubicaciones`): alta y listado, con tipo de
   ubicación (recepción/almacenamiento/preparación/despacho/cuarentena/tránsito/devolución).
 - Proveedores (`/api/proveedores`): alta, listado, desactivación.

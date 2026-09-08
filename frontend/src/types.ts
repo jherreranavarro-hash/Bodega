@@ -26,6 +26,16 @@ export interface Producto {
   activo: boolean;
   unidadBase?: { codigo: string; nombre: string };
   categoria?: { nombre: string } | null;
+  // Campos declarados en la llegada más reciente (Mercado Libre / liquidación), no
+  // propios del producto — puede no existir si el producto nunca tuvo una llegada.
+  ultimaLlegada?: {
+    grupo: string | null;
+    condicion: string | null;
+    status: string | null;
+    subStatus: string | null;
+    grade: string | null;
+    fechaLlegada: string;
+  } | null;
 }
 
 export interface UnidadMedida {

@@ -19,6 +19,7 @@ residuales de una corrida anterior):
 ✓ tests/devoluciones.test.ts (4 tests)
 ✓ tests/solicitudes-compra.test.ts (5 tests)
 ✓ tests/pronosticos.test.ts (5 tests)
+✓ tests/productos.test.ts (4 tests)
 ✓ tests/cargas.test.ts (5 tests)
 ✓ tests/alertas.test.ts (6 tests)
 ✓ tests/reconciliacion.test.ts (3 tests)
@@ -32,8 +33,8 @@ residuales de una corrida anterior):
 ✓ tests/precios.test.ts (10 tests)
 ✓ tests/adjuntos.test.ts (4 tests)
 
-Test Files  16 passed (16)
-     Tests  74 passed (74)
+Test Files  17 passed (17)
+     Tests  78 passed (78)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -127,6 +128,13 @@ Adicionalmente se prueba (más allá del mínimo pedido):
   encabezados funciona igual que con CSV; y —caso encontrado con un archivo real de
   liquidación de 619 filas— un mismo `Código` con distinto `Código ML` crea dos
   productos separados en vez de mezclar sus datos.
+- **Catálogo de productos** (`tests/productos.test.ts`): el listado expone en
+  `ultimaLlegada` los campos de la llegada más reciente (no de la primera, si un
+  producto tuvo varias); filtrar por grupo/condición usa solo la última llegada, no
+  cualquier llegada histórica del producto; un producto sin llegadas nunca aparece bajo
+  un filtro de llegada y su `ultimaLlegada` queda `null`; `GET /productos/filtros/
+  llegada` retorna los valores distintos realmente declarados en las llegadas de la
+  empresa.
 - **Precios de venta** (`tests/precios.test.ts`): modo fijo calcula exactamente el
   precio indicado; modo porcentaje calcula sobre el valor de referencia de la última
   llegada; sin valor de referencia todavía, el precio calculado queda vacío (nunca

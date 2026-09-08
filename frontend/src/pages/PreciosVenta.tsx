@@ -69,8 +69,8 @@ export function PreciosVenta() {
         porcentajeMargen: e.modo === "PORCENTAJE" ? Number(e.valor) : undefined,
         afectoIva: e.afectoIva,
       });
-      setMensaje("Precio actualizado.");
       await cargar();
+      setMensaje("Precio actualizado.");
     } catch (err) {
       setError(err instanceof ErrorApi ? err.message : "No se pudo actualizar el precio");
     }

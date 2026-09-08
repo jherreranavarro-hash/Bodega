@@ -248,6 +248,27 @@ await paso("el producto llegado aparece en Productos", async () => {
   await page.waitForSelector(`text=${codigoLlegada}`, { timeout: 10000 });
 });
 
+await paso("productos: muestra Grupo/Condición/Status/Sub Status/Grade de la última llegada y permite filtrar por ellos", async () => {
+  const fila = page.locator("tr", { hasText: codigoLlegada });
+  await fila.waitFor({ timeout: 10000 });
+  const textoFila = await fila.textContent();
+  for (const valor of ["Electrónica", "Usado", "Cerrado", "Entregado", "A"]) {
+    if (!textoFila?.includes(valor)) {
+      throw new Error(`La fila del producto no muestra "${valor}" (columnas de la última llegada): "${textoFila}"`);
+    }
+  }
+
+  // El filtro de Grupo trae el valor real declarado en la llegada como opción, y
+  // filtrar por él mantiene visible el producto.
+  const selectGrupo = page.locator("select").filter({ has: page.locator('option[value="Electrónica"]') });
+  await selectGrupo.selectOption("Electrónica");
+  await page.waitForSelector(`text=${codigoLlegada}`, { timeout: 10000 });
+
+  // Volver a "todos" también debe mostrarlo.
+  await selectGrupo.selectOption("");
+  await page.waitForSelector(`text=${codigoLlegada}`, { timeout: 10000 });
+});
+
 await paso("precios de venta: configura un margen porcentual y se calcula el precio real", async () => {
   await page.click('a:has-text("Precios de Venta")');
   await page.waitForSelector("text=Precios de venta");

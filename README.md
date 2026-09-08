@@ -1,12 +1,13 @@
 # Bodega Demo — Sistema Integral de Bodega, Inventario y Toma de Decisiones
 
 Sistema modular de administración de bodegas e inventario: mantenedores, centro de
-cargas de datos, compras (con solicitud y aprobación propia), recepción (multimoneda),
-reservas, preparación, despacho, transferencias, devoluciones, conteos/ajustes,
-indicadores, bandeja de decisiones con alertas automáticas, y pronósticos/escenarios de
-simulación — con persistencia real en PostgreSQL, control de acceso por rol/empresa/
-bodega, períodos contables cerrados, reconciliación de saldos, trazabilidad completa y
-pruebas automatizadas.
+cargas de datos (CSV y Excel), compras (con solicitud y aprobación propia), recepción
+(multimoneda), llegada de productos de Mercado Libre/liquidación con mantenedor de
+precios de venta, reservas, preparación, despacho, transferencias, devoluciones,
+conteos/ajustes, indicadores, bandeja de decisiones con alertas automáticas, y
+pronósticos/escenarios de simulación — con persistencia real en PostgreSQL, control de
+acceso por rol/empresa/bodega, períodos contables cerrados, reconciliación de saldos,
+trazabilidad completa y pruebas automatizadas.
 
 Este repositorio es una **implementación funcional**, no una maqueta. Lee
 `docs/plan-implementacion.md` para ver qué está completo y qué queda pendiente de forma
@@ -103,7 +104,7 @@ en `prisma/seed.ts` y se identifican con el RUT `RUT-*`/`76.123.456-7` y código
 
 ```bash
 cd backend
-npm test         # 57 pruebas de aceptación contra PostgreSQL real (ver docs/pruebas.md)
+npm test         # 70 pruebas de aceptación contra PostgreSQL real (ver docs/pruebas.md)
 npm run reconciliar -- 76.123.456-7   # concilia saldos vs. movimientos (RUT de la empresa demo)
 
 cd frontend

@@ -24,6 +24,7 @@ const RECURSOS_ACCIONES: [string, string[]][] = [
   ["parametros", ["consultar", "modificar"]],
   ["adjuntos", ["consultar", "crear"]],
   ["administracion", ["consultar", "modificar"]],
+  ["precios", ["consultar", "modificar"]],
 ];
 
 const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.accion" o "*" */ }> = {
@@ -33,7 +34,7 @@ const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.acc
     permisos: [
       "productos.consultar", "bodegas.*", "ubicaciones.*", "cargas.consultar", "cargas.aprobar",
       "compras.consultar", "recepciones.*", "solicitudes_salida.*", "reservas.*", "preparaciones.*", "despachos.*",
-      "transferencias.*", "devoluciones.*", "conteos.*", "ajustes.consultar", "ajustes.aprobar", "indicadores.consultar", "alertas.*", "adjuntos.*",
+      "transferencias.*", "devoluciones.*", "conteos.*", "ajustes.consultar", "ajustes.aprobar", "indicadores.consultar", "alertas.*", "adjuntos.*", "precios.consultar",
     ],
   },
   operador: {
@@ -42,12 +43,12 @@ const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.acc
   },
   compras: {
     nombre: "Compras",
-    permisos: ["productos.consultar", "proveedores.*", "compras.*", "recepciones.consultar", "indicadores.consultar", "alertas.*"],
+    permisos: ["productos.consultar", "proveedores.*", "compras.*", "recepciones.consultar", "indicadores.consultar", "alertas.*", "cargas.*", "precios.*", "bodegas.consultar"],
   },
   solicitante: { nombre: "Solicitante", permisos: ["productos.consultar", "solicitudes_salida.consultar", "solicitudes_salida.crear"] },
   aprobador: { nombre: "Aprobador", permisos: ["compras.aprobar", "cargas.aprobar", "ajustes.aprobar", "solicitudes_salida.aprobar", "indicadores.consultar", "alertas.consultar"] },
-  auditor: { nombre: "Auditor", permisos: ["productos.consultar", "bodegas.consultar", "ubicaciones.consultar", "cargas.consultar", "compras.consultar", "recepciones.consultar", "solicitudes_salida.consultar", "reservas.consultar", "despachos.consultar", "transferencias.consultar", "conteos.consultar", "ajustes.consultar", "indicadores.consultar", "alertas.consultar", "adjuntos.consultar"] },
-  gerencia: { nombre: "Gerencia", permisos: ["indicadores.consultar", "productos.consultar", "compras.consultar", "alertas.consultar"] },
+  auditor: { nombre: "Auditor", permisos: ["productos.consultar", "bodegas.consultar", "ubicaciones.consultar", "cargas.consultar", "compras.consultar", "recepciones.consultar", "solicitudes_salida.consultar", "reservas.consultar", "despachos.consultar", "transferencias.consultar", "conteos.consultar", "ajustes.consultar", "indicadores.consultar", "alertas.consultar", "adjuntos.consultar", "precios.consultar"] },
+  gerencia: { nombre: "Gerencia", permisos: ["indicadores.consultar", "productos.consultar", "compras.consultar", "alertas.consultar", "precios.consultar"] },
 };
 
 async function main() {
@@ -302,6 +303,31 @@ async function main() {
         { campo: "lote_codigo", obligatorio: false, formato: "texto" },
         { campo: "fecha_vencimiento", obligatorio: false, formato: "YYYY-MM-DD" },
         { campo: "costo_unitario", obligatorio: false, formato: "decimal >= 0", observacion: "si se omite, el costo queda pendiente (nunca se asume cero)" },
+      ],
+    },
+  });
+  await prisma.plantillaCarga.upsert({
+    where: { entidad_version: { entidad: "LLEGADA_PRODUCTOS", version: "1.0" } },
+    update: {},
+    create: {
+      entidad: "LLEGADA_PRODUCTOS",
+      version: "1.0",
+      descripcionCampos: [
+        { campo: "grupo", obligatorio: false, formato: "texto" },
+        { campo: "codigo", obligatorio: true, formato: "texto", ejemplo: "PROD-200", observacion: "código interno; si no existe, crea el producto" },
+        { campo: "codigo_ml", obligatorio: false, formato: "texto", observacion: "código de la publicación en Mercado Libre" },
+        { campo: "codigo_original", obligatorio: false, formato: "texto", observacion: "código del proveedor/origen" },
+        { campo: "titulo", obligatorio: false, formato: "texto", observacion: "obligatorio solo si el producto no existe todavía (se usa como nombre)" },
+        { campo: "condicion", obligatorio: false, formato: "texto", ejemplo: "Usado" },
+        { campo: "status", obligatorio: false, formato: "texto" },
+        { campo: "sub_status", obligatorio: false, formato: "texto" },
+        { campo: "grade", obligatorio: false, formato: "texto", ejemplo: "A" },
+        { campo: "cantidad_solicitada", obligatorio: false, formato: "decimal >= 0", observacion: "informativo, no mueve stock" },
+        { campo: "cantidad_colectada", obligatorio: false, formato: "decimal >= 0", observacion: "informativo, no mueve stock" },
+        { campo: "cantidad_enviada", obligatorio: false, formato: "decimal >= 0", observacion: "si es mayor a 0, genera una recepción real de inventario" },
+        { campo: "peso", obligatorio: false, formato: "decimal >= 0" },
+        { campo: "valor", obligatorio: false, formato: "decimal >= 0", observacion: "valor unitario en pesos (CLP); si se omite, el costo queda pendiente" },
+        { campo: "valor_en_usd", obligatorio: false, formato: "decimal >= 0", observacion: "solo referencial" },
       ],
     },
   });

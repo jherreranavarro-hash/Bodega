@@ -66,7 +66,7 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 |---|---|---|
 | Administración y seguridad (empresas, usuarios, roles, permisos, auditoría) | Implementado, con panel de administración de roles/permisos en la UI | `modules/auth`, `modules/administracion`, `middleware/*` |
 | Mantenedores (productos, bodegas, ubicaciones, proveedores, catálogos) | Implementado (subconjunto priorizado) | `modules/productos`, `modules/maestros` |
-| Centro de cargas de datos | Implementado (entidades PRODUCTOS e INVENTARIO_INICIAL) | `modules/cargas` |
+| Centro de cargas de datos | Implementado (entidades PRODUCTOS, INVENTARIO_INICIAL y LLEGADA_PRODUCTOS; acepta CSV y Excel .xlsx) | `modules/cargas` |
 | Compras y abastecimiento | Implementado (solicitud con aprobación propia → orden de compra → recepción) | `modules/compras` |
 | Recepción y almacenamiento | Implementado | `modules/recepciones` |
 | Inventario y trazabilidad | Implementado (motor central + reconciliación de saldos + períodos cerrados) | `modules/inventario` |
@@ -79,6 +79,7 @@ la apariencia visual de los tableros (mandato explícito del encargo, sección 1
 | Costos y valorización | Implementado: FIFO/promedio ponderado, multimoneda en recepciones | `modules/recepciones`, `modules/despachos` |
 | Reportes e integraciones | Exportación CSV de errores de carga; sin integraciones externas | `modules/cargas` |
 | Adjuntos y evidencias | Implementado: almacenamiento real en disco, API genérica sin integrar aún a los campos de evidencia puntuales | `modules/adjuntos` |
+| Precios de venta | Implementado: precio fijo o porcentaje de margen sobre el valor declarado en la llegada más reciente del producto | `modules/precios` |
 | Asistente de IA | No implementado (fuera de alcance de esta iteración) | — |
 
 Ver el detalle módulo por módulo, con lo que falta explícitamente, en `docs/modulos.md`.

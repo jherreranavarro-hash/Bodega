@@ -215,6 +215,53 @@ await paso("administración: otorga y revoca un permiso real de un rol", async (
   await page.waitForSelector("text=admin@bodegademo.cl");
 });
 
+const codigoLlegada = `SMOKE-ML-${Date.now()}`;
+
+await paso("llegada de productos: sube un CSV con encabezados en español, valida, aprueba y ejecuta", async () => {
+  await page.click('a:has-text("Centro de Cargas")');
+  await page.waitForSelector("text=Centro de cargas de datos");
+  await page.selectOption("form.tarjeta.grid-form select >> nth=0", "LLEGADA_PRODUCTOS");
+  await page.waitForSelector("text=Bodega de destino");
+  // Con LLEGADA_PRODUCTOS el formulario tiene 3 selects en orden: Entidad, Modo, Bodega de destino.
+  const selectBodega = page.locator("form.tarjeta.grid-form select").nth(2);
+  await selectBodega.locator("option").nth(1).waitFor({ state: "attached", timeout: 10000 }); // espera a que /bodegas termine de cargar (Playwright considera <option> "oculto" aunque esté listo)
+  await selectBodega.selectOption({ index: 1 }); // primera bodega real de la lista
+
+  const csv =
+    "Grupo,Código,Código ML,Código original,Título,Condición,Status,Sub Status,Grade,Cantidad solicitada,Cantidad colectada,Cantidad enviada,Peso,Valor,Valor en USD\n" +
+    `Electrónica,${codigoLlegada},MLC-SMOKE,ORIG-SMOKE,Cargador rápido de humo,Usado,Cerrado,Entregado,A,2,2,2,0.2,9000,10\n`;
+  await page.setInputFiles('input[type="file"]', { name: "llegada-smoke.csv", mimeType: "text/csv", buffer: Buffer.from(csv, "utf-8") });
+  await page.click('form.tarjeta.grid-form button[type="submit"]');
+  await page.waitForSelector("text=Archivo recibido en el área de preparación", { timeout: 10000 });
+
+  const fila = page.locator("tr", { hasText: "llegada-smoke.csv" });
+  await fila.getByRole("button", { name: "Validar y simular" }).click();
+  await page.waitForTimeout(500);
+  await fila.getByRole("button", { name: "Aprobar" }).click();
+  await page.waitForTimeout(500);
+  await fila.getByRole("button", { name: "Ejecutar" }).click();
+  await page.waitForSelector('tr:has-text("llegada-smoke.csv") >> text=Completada', { timeout: 10000 });
+});
+
+await paso("el producto llegado aparece en Productos", async () => {
+  await page.click('a:has-text("Productos")');
+  await page.waitForSelector(`text=${codigoLlegada}`, { timeout: 10000 });
+});
+
+await paso("precios de venta: configura un margen porcentual y se calcula el precio real", async () => {
+  await page.click('a:has-text("Precios de Venta")');
+  await page.waitForSelector("text=Precios de venta");
+  const fila = page.locator("tr", { hasText: codigoLlegada });
+  await fila.waitFor({ timeout: 10000 });
+  await fila.locator('input[type="number"]').fill("50");
+  await fila.locator('button:has-text("Guardar")').click();
+  await page.waitForSelector("text=Precio actualizado.", { timeout: 10000 });
+  const textoPrecio = await fila.locator("strong").textContent();
+  if (!textoPrecio || textoPrecio.includes("Sin calcular")) {
+    throw new Error(`El precio de venta no se calculó a partir del valor declarado en la llegada: "${textoPrecio}"`);
+  }
+});
+
 if (errores.length > 0) {
   console.log("Errores de consola detectados:", errores);
 }

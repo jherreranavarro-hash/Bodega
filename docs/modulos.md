@@ -39,21 +39,35 @@ iniciado en este entregable).
   cargas exporta errores); historial de cambios visible en UI (existe `Auditoria` en
   base, falta pantalla).
 
-## Centro de cargas de datos — Implementado (dos entidades)
-- Entidades soportadas: `PRODUCTOS`, `INVENTARIO_INICIAL`.
+## Centro de cargas de datos — Implementado (tres entidades)
+- Entidades soportadas: `PRODUCTOS`, `INVENTARIO_INICIAL`, `LLEGADA_PRODUCTOS`.
 - Flujo completo: recepción a zona de preparación → validación estructural/negocio →
   simulación (crear/actualizar/rechazar/sin cambio) → aprobación → ejecución
   transaccional → errores descargables en CSV.
-- Idempotencia por hash de contenido (no por nombre de archivo).
+- Acepta CSV y **Excel (.xlsx)** indistintamente: ambos formatos pasan por el mismo
+  parser, con los encabezados normalizados a snake_case ASCII (sin tildes, espacios a
+  `_`), así que un archivo con columnas legibles ("Código ML", "Valor en USD") produce
+  las mismas claves que uno ya en snake_case.
+- **`LLEGADA_PRODUCTOS`** (mercadería de Mercado Libre / liquidación): crea o actualiza
+  el producto por código (a diferencia de `INVENTARIO_INICIAL`, aquí sí se espera
+  mercadería nueva, nunca rechaza por producto inexistente) y, cuando la fila trae
+  cantidad enviada, registra una recepción real (`TipoOperacion.RECEPCION`) hacia una
+  ubicación técnica "Recepción" autoprovisionada por bodega, en estado `DISPONIBLE`. Las
+  cantidades solicitada/colectada son puramente informativas y nunca mueven inventario.
+  El valor unitario declarado alimenta además el valor de referencia del mantenedor de
+  precios de venta (ver más abajo). Requiere indicar la bodega de destino (no viene en
+  el archivo). Detalle completo, incluyendo el diccionario de campos, en
+  `docs/centro-de-cargas.md`. Cubierto por 6 pruebas (`tests/llegada-productos.test.ts`).
+- Idempotencia por hash de contenido y, cuando aplica, del contexto de la carga (p. ej.
+  la bodega de destino) — no por nombre de archivo.
 - Límite de 5000 filas por archivo (`MAXIMO_FILAS_POR_CARGA`): un archivo mayor se
   rechaza explícitamente antes de simularlo o ejecutarlo, para que una carga mal
   formada no pueda saturar el proceso de validación.
-- Detalle completo en `docs/centro-de-cargas.md`.
 - Pendiente: entidades adicionales (proveedores, bodegas, ubicaciones, conversiones,
   parámetros de reposición, lotes, series como cargas independientes — hoy solo se
   crean por mantenedor o como parte de inventario inicial); mapeo de columnas
-  configurable por el usuario (`mapeos_carga` existe en el modelo, sin UI); soporte Excel
-  (.xlsx) además de CSV; escaneo antivirus de archivos maliciosos más allá del filtro de
+  configurable por el usuario (`mapeos_carga` existe en el modelo, sin UI); escaneo
+  antivirus de archivos maliciosos más allá del filtro de
   extensión/tamaño.
 
 ## Compras y abastecimiento — Implementado
@@ -120,6 +134,26 @@ iniciado en este entregable).
   indicadores no mezclan monedas, pero no hay una vista que muestre el valor en una
   moneda de reporte distinta a la base); traslados internos entre bodegas de distinta
   empresa (no aplica en este modelo: una transferencia siempre es intraempresa).
+
+## Precios de venta — Implementado
+- Mantenedor por producto (`GET/PUT /api/precios`, pantalla "Precios de Venta"): cada
+  producto tiene un precio de venta en modo **Fijo** (un monto en pesos definido a
+  mano) o **Porcentaje** (un margen sobre el último valor declarado en su llegada más
+  reciente vía `LLEGADA_PRODUCTOS`). El precio calculado se recalcula y persiste cada
+  vez que cambia el modo, el margen/precio fijo, o llega un nuevo valor de referencia
+  — nunca se recalcula "al vuelo" en cada lectura ni se muestra una cifra inventada: en
+  modo porcentaje, sin valor de referencia todavía, la pantalla muestra "Sin calcular"
+  en vez de asumir un valor.
+- El valor de referencia (`valorReferenciaClp`/`valorReferenciaUsd`) se actualiza
+  automáticamente desde `modules/cargas` cada vez que llega una fila de
+  `LLEGADA_PRODUCTOS` con valor declarado, dentro de la misma transacción que registra
+  la llegada — no requiere ninguna acción manual para mantenerse al día.
+- Cubierto por 7 pruebas (`tests/precios.test.ts`) y por el smoke test de UI (sube una
+  llegada real, configura un margen porcentual, y verifica que el precio calculado se
+  obtiene del valor real declarado en el Excel, no de una cifra arbitraria).
+- Pendiente: historial de cambios de precio (hoy solo se guarda el estado vigente, no
+  quién cambió qué y cuándo más allá de `actualizadoPorId`/`actualizadoEn`); reglas de
+  precio por lote de compra o por canal de venta (hoy es un precio único por producto).
 
 ## Solicitudes y reservas — Implementado
 - `/api/salidas/solicitudes`, `/api/salidas/reservas`. FEFO opcional

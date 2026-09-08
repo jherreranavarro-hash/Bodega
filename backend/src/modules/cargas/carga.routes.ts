@@ -10,8 +10,8 @@ import { recibirArchivo, validarYSimular, aprobarCarga, ejecutarCarga } from "./
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const permitido = [".csv", ".txt"].some((ext) => file.originalname.toLowerCase().endsWith(ext));
-    if (!permitido) return cb(new Error("Solo se aceptan archivos .csv"));
+    const permitido = [".csv", ".txt", ".xlsx"].some((ext) => file.originalname.toLowerCase().endsWith(ext));
+    if (!permitido) return cb(new Error("Solo se aceptan archivos .csv o .xlsx"));
     cb(null, true);
   },
 });
@@ -27,12 +27,24 @@ cargasRouter.get("/plantillas", requierePermiso("cargas", "consultar"), async (_
 const recibirSchema = z.object({
   entidad: z.string(),
   modo: z.enum(["SOLO_CREACION", "SOLO_ACTUALIZACION", "CREACION_Y_ACTUALIZACION", "VALIDACION_SIN_APLICAR"]),
+  // JSON con parámetros propios de la entidad que no vienen en el archivo
+  // (p. ej. {"bodegaDestinoId":"..."} para LLEGADA_PRODUCTOS).
+  contexto: z.string().optional(),
 });
 
 cargasRouter.post("/", requierePermiso("cargas", "importar"), upload.single("archivo"), async (req, res) => {
   const parsed = recibirSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   if (!req.file) return res.status(400).json({ error: "Debe adjuntar un archivo" });
+
+  let contexto: Record<string, unknown> | undefined;
+  if (parsed.data.contexto) {
+    try {
+      contexto = JSON.parse(parsed.data.contexto);
+    } catch {
+      return res.status(400).json({ error: "El campo contexto no es un JSON válido" });
+    }
+  }
 
   try {
     const carga = await recibirArchivo({
@@ -42,6 +54,7 @@ cargasRouter.post("/", requierePermiso("cargas", "importar"), upload.single("arc
       nombreArchivo: req.file.originalname,
       contenido: req.file.buffer,
       usuarioId: req.usuario!.usuarioId,
+      contexto,
     });
     await registrarAuditoria({
       empresaId: req.usuario!.empresaId,

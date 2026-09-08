@@ -14,6 +14,7 @@ import { Ajustes } from "./pages/Ajustes";
 import { Alertas } from "./pages/Alertas";
 import { Pronosticos } from "./pages/Pronosticos";
 import { Administracion } from "./pages/Administracion";
+import { PreciosVenta } from "./pages/PreciosVenta";
 
 function RutaProtegida({ children }: { children: React.ReactNode }) {
   const { autenticado } = useAuth();
@@ -42,6 +43,7 @@ function Rutas() {
         <Route path="/ajustes" element={<Ajustes />} />
         <Route path="/alertas" element={<Alertas />} />
         <Route path="/pronosticos" element={<Pronosticos />} />
+        <Route path="/precios" element={<PreciosVenta />} />
         <Route path="/administracion" element={<Administracion />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

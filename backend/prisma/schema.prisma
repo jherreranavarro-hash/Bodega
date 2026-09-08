@@ -58,6 +58,8 @@ model Empresa {
   solicitudesSalida SolicitudSalida[]
   auditoria         Auditoria[]
   alertas           Alerta[]
+  llegadasProducto  LlegadaProducto[]
+  preciosVenta      PrecioVenta[]
   aprobaciones      Aprobacion[]
 
   @@map("empresas")
@@ -249,6 +251,7 @@ model Bodega {
   devoluciones        Devolucion[]
   transferenciasOrigen  Transferencia[] @relation("transferenciaOrigen")
   transferenciasDestino Transferencia[] @relation("transferenciaDestino")
+  llegadasProducto      LlegadaProducto[]
 
   @@unique([empresaId, codigo])
   @@map("bodegas")
@@ -342,6 +345,12 @@ model Producto {
   nombre                String
   descripcion           String?
   codigoBarras          String?
+  // Origen del producto cuando llega vía el centro de cargas "LLEGADA_PRODUCTOS"
+  // (mercadería de Mercado Libre / liquidación). Ninguno es obligatorio: un
+  // producto creado por otra vía simplemente no los tiene.
+  codigoMercadoLibre      String?   @map("codigo_mercado_libre")
+  codigoOriginalProveedor String?   @map("codigo_original_proveedor")
+  grupo                   String?
   categoriaId           String?   @map("categoria_id")
   categoria             Categoria? @relation(fields: [categoriaId], references: [id])
   marcaId               String?   @map("marca_id")
@@ -384,8 +393,11 @@ model Producto {
   capasCosto            CapaCosto[]
   demandaRegistrada     DemandaRegistrada[]
   pronosticos           Pronostico[]
+  llegadas              LlegadaProducto[]
+  precioVenta           PrecioVenta?
 
   @@unique([empresaId, codigo])
+  @@unique([empresaId, codigoMercadoLibre])
   @@index([empresaId, codigoBarras])
   @@map("productos")
 }
@@ -686,6 +698,8 @@ model MovimientoInventario {
   creadoEn          DateTime          @default(now())
 
   @@index([productoId, ubicacionDestinoId, loteId, serieId])
+  llegadaProducto   LlegadaProducto?
+
   @@index([productoId, ubicacionOrigenId, loteId, serieId])
   @@map("movimientos_inventario")
 }
@@ -1367,9 +1381,15 @@ model CargaDatos {
   aprobadoPor      Usuario?       @relation("cargaAprobadaPor", fields: [aprobadoPorId], references: [id])
   creadoEn         DateTime       @default(now())
   procesadoEn      DateTime?      @map("procesado_en")
+  // Parámetros propios de ciertos tipos de carga que no vienen en el archivo
+  // (p. ej. la bodega de destino para LLEGADA_PRODUCTOS). No todas las
+  // entidades lo necesitan; se deja libre en vez de agregar una columna por
+  // cada entidad nueva.
+  contexto         Json?
 
-  filas    CargaFila[]
-  errores  CargaError[]
+  filas     CargaFila[]
+  errores   CargaError[]
+  llegadas  LlegadaProducto[]
 
   @@map("cargas_datos")
 }
@@ -1399,6 +1419,87 @@ model CargaError {
   mensaje    String
 
   @@map("cargas_errores")
+}
+
+// ----------------------------------------------------------------------------
+// 16.1 LLEGADA DE PRODUCTOS (Mercado Libre / liquidación) Y PRECIOS DE VENTA
+// ----------------------------------------------------------------------------
+
+// Un registro por fila del Excel de "llegada de productos" (entidad de carga
+// LLEGADA_PRODUCTOS). Es un evento informativo por naturaleza (Grupo,
+// Condición, Status, Sub Status, Grade, Título, cantidades y valores
+// declarados por Mercado Libre) que además, cuando cantidadEnviada > 0, deja
+// un movimiento de inventario real (vía crearOperacion/registrarMovimiento,
+// igual que una recepción de compra) para que el producto quede disponible
+// para la venta. Nunca se calcula ni se asume: si el Excel no trae cantidad
+// enviada, no entra stock, aunque el resto de la fila sea válida.
+model LlegadaProducto {
+  id           String       @id @default(uuid())
+  empresaId    String       @map("empresa_id")
+  empresa      Empresa      @relation(fields: [empresaId], references: [id])
+  productoId   String       @map("producto_id")
+  producto     Producto     @relation(fields: [productoId], references: [id])
+  bodegaId     String       @map("bodega_id")
+  bodega       Bodega       @relation(fields: [bodegaId], references: [id])
+  cargaId      String?      @map("carga_id")
+  carga        CargaDatos?  @relation(fields: [cargaId], references: [id])
+  // Movimiento de inventario generado por esta llegada (solo si cantidadEnviada > 0).
+  movimientoId String?      @unique @map("movimiento_id")
+  movimiento   MovimientoInventario? @relation(fields: [movimientoId], references: [id])
+
+  grupo              String?
+  tituloOriginal     String?  @map("titulo_original")
+  condicion          String?
+  status             String?
+  subStatus          String?  @map("sub_status")
+  grade              String?
+  cantidadSolicitada Decimal? @db.Decimal(14, 4) @map("cantidad_solicitada")
+  cantidadColectada  Decimal? @db.Decimal(14, 4) @map("cantidad_colectada")
+  cantidadEnviada    Decimal  @default(0) @db.Decimal(14, 4) @map("cantidad_enviada")
+  // Valor declarado por unidad (no total), tal como se documenta en
+  // plan-implementacion.md: mismo criterio que costo_unitario en el resto
+  // del sistema.
+  pesoKg   Decimal? @db.Decimal(14, 4) @map("peso_kg")
+  valorClp Decimal? @db.Decimal(14, 2) @map("valor_clp")
+  valorUsd Decimal? @db.Decimal(14, 2) @map("valor_usd")
+
+  fechaLlegada DateTime @default(now()) @map("fecha_llegada")
+  creadoEn     DateTime @default(now()) @map("creado_en")
+
+  @@index([empresaId, productoId])
+  @@map("llegadas_producto")
+}
+
+enum ModoPrecioVenta {
+  FIJO
+  PORCENTAJE
+}
+
+// Mantenedor de precio de venta por producto. El precio se puede fijar en
+// pesos (FIJO) o como porcentaje de margen sobre el último valor de
+// referencia conocido (valorReferenciaClp, actualizado desde la llegada más
+// reciente del producto). precioVentaCalculado se recalcula y persiste cada
+// vez que cambia cualquier insumo, para no tener que recomputarlo en cada
+// lectura de listado.
+model PrecioVenta {
+  id                    String          @id @default(uuid())
+  empresaId             String          @map("empresa_id")
+  empresa               Empresa         @relation(fields: [empresaId], references: [id])
+  productoId            String          @unique @map("producto_id")
+  producto              Producto        @relation(fields: [productoId], references: [id])
+
+  modo                  ModoPrecioVenta @default(PORCENTAJE)
+  precioFijoClp         Decimal?        @db.Decimal(14, 2) @map("precio_fijo_clp")
+  porcentajeMargen      Decimal?        @db.Decimal(7, 4) @map("porcentaje_margen")
+  valorReferenciaClp    Decimal?        @db.Decimal(14, 2) @map("valor_referencia_clp")
+  valorReferenciaUsd    Decimal?        @db.Decimal(14, 2) @map("valor_referencia_usd")
+  precioVentaCalculado  Decimal?        @db.Decimal(14, 2) @map("precio_venta_calculado")
+
+  actualizadoPorId String?  @map("actualizado_por_id")
+  actualizadoEn    DateTime @updatedAt @map("actualizado_en")
+  creadoEn         DateTime @default(now()) @map("creado_en")
+
+  @@map("precios_venta")
 }
 
 // ----------------------------------------------------------------------------

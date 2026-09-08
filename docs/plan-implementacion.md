@@ -149,6 +149,72 @@ acotado a los mismos indicadores/documentos ya trazables (incluyendo pronóstico
 limitaciones, ya implementados en la fase 3) — nunca con acceso irrestricto a la base ni
 ejecución de operaciones sin las aprobaciones del sistema.
 
+## Fase 6 — Llegada de productos (Mercado Libre / liquidación) y precios de venta
+
+A pedido explícito: una interfaz de carga en Excel para la llegada de mercadería
+(columnas Grupo, Código, Código ML, Código original, Título, Condición, Status, Sub
+Status, Grade, Cantidad solicitada/colectada/enviada, Peso, Valor, Valor en USD), con el
+objetivo declarado de poder fijar el precio de venta de cada producto en pesos o como
+porcentaje de margen.
+
+1. **Soporte de archivos Excel (.xlsx) en el centro de cargas** (`modules/cargas`): antes
+   solo se aceptaba CSV. Ahora ambos formatos comparten el mismo parser; los
+   encabezados se normalizan a snake_case ASCII (sin tildes, minúsculas, espacios a
+   `_`), de modo que un archivo con las columnas reales de Mercado Libre no necesita
+   editarse antes de subirlo. Este era un pendiente ya documentado en fases anteriores.
+2. **Nueva entidad de carga `LLEGADA_PRODUCTOS`**: cada fila puede crear o actualizar el
+   producto (a diferencia de `INVENTARIO_INICIAL`, aquí sí se espera mercadería nueva) y,
+   si trae cantidad enviada, registra una recepción real. Nunca se marca una fila como
+   "sin cambio": cada fila es un evento de llegada distinto, incluso si el producto ya
+   existía. Detalle completo en `docs/centro-de-cargas.md`.
+3. **Mantenedor de precios de venta** (`modules/precios`, pantalla "Precios de Venta"):
+   precio fijo en pesos o porcentaje de margen sobre el valor declarado en la llegada
+   más reciente del producto, con el precio calculado siempre persistido (nunca
+   recomputado silenciosamente en el momento de leer, para poder auditar qué precio
+   estuvo vigente).
+
+Decisiones tomadas explícitamente (confirmadas con el usuario antes de tocar el modelo
+de datos):
+
+| Decisión | Alternativa descartada | Por qué |
+|---|---|---|
+| Los productos de esta carga son el mismo catálogo (`Producto`), no uno aparte | Catálogo independiente de mercadería ML | El usuario lo pidió así explícitamente: se integra con inventario, bodegas y el resto del sistema |
+| `cantidad_enviada` genera una recepción real de inventario; `cantidad_solicitada`/`cantidad_colectada` son solo informativas | Que ninguna cantidad afecte stock | El usuario confirmó que "cantidad enviada = ingreso real a bodega" |
+| El porcentaje de margen se aplica sobre el `valor`/`valor_en_usd` del Excel (el valor de referencia más reciente) | Aplicarlo sobre otro campo de costo del sistema | Confirmado por el usuario como la base del cálculo |
+| `Valor` (sin USD) se interpreta como pesos chilenos (CLP) | Otra moneda | Confirmado por el usuario |
+
+Supuestos adicionales, no confirmados explícitamente por tratarse de detalles de
+implementación no cubiertos en las preguntas anteriores — documentados aquí en vez de
+asumidos en silencio:
+
+- **`Valor` es un valor unitario**, no el total de la línea — mismo criterio que
+  `costo_unitario` en el resto del sistema (`INVENTARIO_INICIAL`, recepciones de
+  compra). Si en la práctica el Excel trae un valor total, hay que dividirlo por la
+  cantidad antes de cargarlo, o pedir que se ajuste este supuesto.
+- **Unidad de medida por defecto al crear un producto nuevo**: `UN` (Unidad). El Excel
+  no trae unidad de medida; si no existe una unidad con código `UN` en la empresa, la
+  fila se rechaza con un mensaje explícito en vez de inventar una unidad.
+- **El título de la llegada no sobrescribe el nombre de un producto ya existente**: solo
+  se usa como `Producto.nombre` al crear el producto por primera vez. En llegadas
+  posteriores del mismo producto, el título se guarda como snapshot informativo
+  (`LlegadaProducto.tituloOriginal`) pero el nombre curado del producto no se toca —
+  para no dejar que un título ruidoso de una publicación reemplace un nombre ya
+  ordenado por el equipo.
+- **Las mercancías llegan directamente a estado `DISPONIBLE`** (no a cuarentena, a
+  diferencia de las devoluciones): se asumió que la llegada de mercadería para la venta
+  no necesita inspección previa, dado que el objetivo declarado es "poder poner los
+  precios de venta". Si en la práctica se necesita revisión antes de habilitar la venta,
+  este es el punto exacto a cambiar (bastaría con usar la ubicación técnica de
+  cuarentena en vez de la de recepción).
+- **La bodega de destino es un único valor por carga completa**, no por fila — el Excel
+  no trae una columna de bodega. Si en la práctica llegan productos a distintas bodegas
+  en un mismo archivo, hay que subir un archivo por bodega, o el archivo se debe
+  extender con una columna de bodega (cambio de plantilla, no solo de código).
+- **`compras`** es el rol al que se le otorgó el permiso completo sobre `cargas.*` y
+  `precios.*` (antes no tenía acceso a cargas en absoluto) — es la mejor aproximación
+  disponible al "equipo comercial" que gestionaría este flujo; ajustar en
+  `backend/prisma/seed.ts` si corresponde a otro rol en la operación real.
+
 ## Supuestos explícitos tomados (parámetros, no reglas fijas)
 
 | Supuesto | Dónde se configuró | Cómo cambiarlo |

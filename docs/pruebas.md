@@ -24,14 +24,16 @@ residuales de una corrida anterior):
 ✓ tests/reconciliacion.test.ts (3 tests)
 ✓ tests/preparaciones.test.ts (3 tests)
 ✓ tests/administracion.test.ts (4 tests)
+✓ tests/llegada-productos.test.ts (6 tests)
 ✓ tests/ajustes.test.ts (1 test)
 ✓ tests/periodos.test.ts (4 tests)
 ✓ tests/multimoneda.test.ts (3 tests)
 ✓ tests/api.test.ts (3 tests)
+✓ tests/precios.test.ts (7 tests)
 ✓ tests/adjuntos.test.ts (4 tests)
 
-Test Files  14 passed (14)
-     Tests  57 passed (57)
+Test Files  16 passed (16)
+     Tests  70 passed (70)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -114,6 +116,21 @@ Adicionalmente se prueba (más allá del mínimo pedido):
   un administrador puede cambiar el rol de un usuario de su misma empresa; no puede
   cambiar el rol de un usuario de otra empresa (404); un rol sin el permiso
   `administracion.consultar` recibe 403 al listar roles.
+- **Llegada de productos vía centro de cargas** (`tests/llegada-productos.test.ts`):
+  crea el producto, la fila de llegada, el movimiento de inventario y el valor de
+  referencia del precio cuando `cantidad_enviada > 0`; con `cantidad_enviada = 0` deja
+  la llegada registrada pero sin movimiento; al llegar un producto ya existente
+  actualiza sus datos de origen (grupo, código ML) sin sobrescribir el nombre curado;
+  rechaza un producto nuevo sin título; exige la bodega de destino antes de aceptar el
+  archivo; acepta el mismo contenido en formato `.xlsx` con los encabezados reales en
+  español (Grupo, Código, Código ML, etc.), probando que la normalización de
+  encabezados funciona igual que con CSV.
+- **Precios de venta** (`tests/precios.test.ts`): modo fijo calcula exactamente el
+  precio indicado; modo porcentaje calcula sobre el valor de referencia de la última
+  llegada; sin valor de referencia todavía, el precio calculado queda vacío (nunca
+  inventa una cifra); una llegada posterior recalcula el precio automáticamente si el
+  modo es porcentaje; rechaza guardar sin el dato requerido según el modo; rechaza
+  actualizar el precio de un producto de otra empresa.
 
 ## Evidencia de la aplicación real (no solo servicios)
 
@@ -126,7 +143,11 @@ compra (queda pendiente de aprobación); el flujo completo solicitud → reserva
 preparación → verificación → despacho; registrar una devolución y verificar que no
 queda disponible; crear una orden de compra; el flujo completo de carga de datos (subir
 CSV → validar y simular → aprobar → ejecutar); calcular un pronóstico (declara datos
-insuficientes) y simular un escenario real; y en Administración, otorgar/revocar un
+insuficientes) y simular un escenario real; en Administración, otorgar/revocar un
 permiso real de un rol y confirmar que la casilla cambia de estado tras la llamada al
-servidor. Esto confirma que la interfaz no tiene "botones ficticios": cada acción llama
-a la API real y persiste en PostgreSQL.
+servidor; y subir una llegada de productos real (CSV con encabezados en español) por el
+centro de cargas, validarla/aprobarla/ejecutarla, confirmar que el producto nuevo
+aparece en el mantenedor de Productos, y en Precios de Venta configurar un margen
+porcentual y verificar que el precio calculado sale del valor real declarado en el
+archivo (no de una cifra arbitraria). Esto confirma que la interfaz no tiene "botones
+ficticios": cada acción llama a la API real y persiste en PostgreSQL.

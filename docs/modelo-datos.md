@@ -107,9 +107,25 @@ sin reescribir historial.
 
 ### `cargas_datos` / `cargas_filas` / `cargas_errores`
 Ver `docs/centro-de-cargas.md` para el flujo completo. La idempotencia se calcula como
-`sha256(empresa_id | entidad | modo | contenido_del_archivo)` — **no** por nombre de
-archivo — y se persiste en `cargas_datos.clave_idempotencia` (`UNIQUE`). Repetir la misma
-carga retorna el registro existente en vez de duplicar filas.
+`sha256(empresa_id | entidad | modo | contenido_del_archivo | contexto)` — **no** por
+nombre de archivo — y se persiste en `cargas_datos.clave_idempotencia` (`UNIQUE`).
+Repetir la misma carga retorna el registro existente en vez de duplicar filas.
+`cargas_datos.contexto` (JSON, opcional) guarda parámetros propios de ciertas entidades
+que no vienen en el archivo (p. ej. `bodegaDestinoId` para `LLEGADA_PRODUCTOS`).
+
+### `llegadas_producto` / `precios_venta`
+Soportan la entidad de carga `LLEGADA_PRODUCTOS` y el mantenedor de precios de venta
+(ver `docs/modulos.md` y `docs/plan-implementacion.md` fase 6 para las decisiones de
+diseño). `llegadas_producto` es un registro histórico por fila importada (nunca se
+actualiza una fila existente con una llegada nueva: cada llegada es un evento propio),
+con `movimiento_id` (único, opcional) apuntando al movimiento de inventario real que
+generó si `cantidad_enviada > 0`. `precios_venta` tiene una fila **por producto**
+(`@@unique([productoId])`): `precio_venta_calculado` se recalcula y persiste cada vez
+que cambia el modo, el margen/precio fijo, o llega un nuevo `valor_referencia_clp` desde
+una llegada — nunca se computa "al vuelo" en el momento de leer.
+
+`Producto` ganó tres columnas opcionales para esta fase: `codigo_mercado_libre` (único
+por empresa), `codigo_original_proveedor` y `grupo`.
 
 ## 3. Reglas de integridad transversales
 
@@ -141,6 +157,7 @@ carga retorna el registro existente en vez de duplicar filas.
 | `20260907140000_devoluciones_flujo` | Campos de resolución en `devoluciones`/`devoluciones_detalle` (motivo, evidencia, responsable, operación de resolución) |
 | `20260907180000_demanda_unica_por_dia` | Índice único `(producto_id, bodega_id, fecha)` en `demanda_registrada`, para poder acumular la demanda del día con `upsert` sin duplicar filas |
 | `20260907190000_movimiento_estado_origen` | Agrega `estado_inventario_origen` a `movimientos_inventario` (ver §5) |
+| `20260908143228_llegadas_producto_y_precios` | Nuevas tablas `llegadas_producto` y `precios_venta`; nuevas columnas en `productos` (`codigo_mercado_libre`, `codigo_original_proveedor`, `grupo`); `cargas_datos.contexto` (JSON) |
 
 Ejecutar `npm run prisma:migrate` (desarrollo) o `npm run prisma:deploy` (aplicar en un
 entorno existente sin generar nuevas migraciones) desde `backend/`.

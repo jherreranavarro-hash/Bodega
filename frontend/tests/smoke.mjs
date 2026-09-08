@@ -262,6 +262,19 @@ await paso("precios de venta: configura un margen porcentual y se calcula el pre
   }
 });
 
+await paso("precios de venta: desmarcar afecto a IVA hace que el precio con IVA sea igual al neto", async () => {
+  const fila = page.locator("tr", { hasText: codigoLlegada });
+  const checkboxIva = fila.locator('input[type="checkbox"]');
+  await checkboxIva.uncheck();
+  await fila.locator('button:has-text("Guardar")').click();
+  await page.waitForSelector("text=Precio actualizado.", { timeout: 10000 });
+  const precioNeto = (await fila.locator("td").nth(7).textContent())?.trim();
+  const precioConIva = (await fila.locator("strong").textContent())?.trim();
+  if (!precioNeto || precioNeto === "Sin calcular" || precioNeto !== precioConIva) {
+    throw new Error(`Al desmarcar "Afecto a IVA" el precio con IVA debería igualar al neto: neto="${precioNeto}" conIva="${precioConIva}"`);
+  }
+});
+
 if (errores.length > 0) {
   console.log("Errores de consola detectados:", errores);
 }

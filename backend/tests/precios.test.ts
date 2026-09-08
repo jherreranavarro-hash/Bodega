@@ -10,6 +10,27 @@ describe("Mantenedor de precios de venta", () => {
     expect(precio.precioVentaCalculado?.toString()).toBe("12000");
   });
 
+  it("afecto a IVA por defecto: el precio con IVA es el neto + 19%", async () => {
+    const e = await crearEscenario();
+    const precio = await actualizarPrecio(e.producto.id, e.empresa.id, { modo: "FIJO", precioFijoClp: 10000 }, e.usuario.id);
+    expect(precio.afectoIva).toBe(true);
+    expect(precio.precioVentaConIva?.toString()).toBe("11900"); // 10000 * 1.19
+  });
+
+  it("no afecto a IVA: el precio con IVA es igual al neto", async () => {
+    const e = await crearEscenario();
+    const precio = await actualizarPrecio(e.producto.id, e.empresa.id, { modo: "FIJO", precioFijoClp: 10000, afectoIva: false }, e.usuario.id);
+    expect(precio.precioVentaConIva?.toString()).toBe("10000");
+  });
+
+  it("cambiar solo el margen conserva la opción de IVA elegida previamente", async () => {
+    const e = await crearEscenario();
+    await actualizarPrecio(e.producto.id, e.empresa.id, { modo: "FIJO", precioFijoClp: 10000, afectoIva: false }, e.usuario.id);
+    const precio = await actualizarPrecio(e.producto.id, e.empresa.id, { modo: "FIJO", precioFijoClp: 20000 }, e.usuario.id);
+    expect(precio.afectoIva).toBe(false);
+    expect(precio.precioVentaConIva?.toString()).toBe("20000");
+  });
+
   it("modo PORCENTAJE: se calcula sobre el valor de referencia de la última llegada", async () => {
     const e = await crearEscenario();
     await prisma.$transaction((tx) => actualizarValorReferencia(tx, e.producto.id, e.empresa.id, 10000, 11));

@@ -1496,7 +1496,13 @@ model PrecioVenta {
   porcentajeMargen      Decimal?        @db.Decimal(7, 4) @map("porcentaje_margen")
   valorReferenciaClp    Decimal?        @db.Decimal(14, 2) @map("valor_referencia_clp")
   valorReferenciaUsd    Decimal?        @db.Decimal(14, 2) @map("valor_referencia_usd")
+  // precioVentaCalculado es siempre el precio NETO (sin impuestos), la misma
+  // base sobre la que se calculaba antes de existir el IVA opcional.
   precioVentaCalculado  Decimal?        @db.Decimal(14, 2) @map("precio_venta_calculado")
+  // Afecto a IVA (19% en Chile). No todo producto lo es (ver bienes/servicios
+  // exentos); por eso es una opción por producto, no un valor fijo global.
+  afectoIva             Boolean         @default(true) @map("afecto_iva")
+  precioVentaConIva     Decimal?        @db.Decimal(14, 2) @map("precio_venta_con_iva")
 
   actualizadoPorId String?  @map("actualizado_por_id")
   actualizadoEn    DateTime @updatedAt @map("actualizado_en")

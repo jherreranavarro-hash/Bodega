@@ -7,7 +7,9 @@ interface Precio {
   porcentajeMargen: string | null;
   valorReferenciaClp: string | null;
   valorReferenciaUsd: string | null;
+  afectoIva: boolean;
   precioVentaCalculado: string | null;
+  precioVentaConIva: string | null;
 }
 
 interface FilaPrecio {
@@ -18,11 +20,17 @@ interface FilaPrecio {
   precio: Precio | null;
 }
 
+interface Edicion {
+  modo: "FIJO" | "PORCENTAJE";
+  valor: string;
+  afectoIva: boolean;
+}
+
 const formatoClp = new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
 export function PreciosVenta() {
   const [filas, setFilas] = useState<FilaPrecio[]>([]);
-  const [edicion, setEdicion] = useState<Record<string, { modo: "FIJO" | "PORCENTAJE"; valor: string }>>({});
+  const [edicion, setEdicion] = useState<Record<string, Edicion>>({});
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
@@ -35,7 +43,7 @@ export function PreciosVenta() {
         if (siguiente[f.productoId]) continue;
         const modo = f.precio?.modo ?? "PORCENTAJE";
         const valor = modo === "FIJO" ? f.precio?.precioFijoClp ?? "" : f.precio?.porcentajeMargen ?? "";
-        siguiente[f.productoId] = { modo, valor: valor ?? "" };
+        siguiente[f.productoId] = { modo, valor: valor ?? "", afectoIva: f.precio?.afectoIva ?? true };
       }
       return siguiente;
     });
@@ -45,7 +53,7 @@ export function PreciosVenta() {
     cargar().catch((err) => setError(err instanceof ErrorApi ? err.message : "No se pudo cargar el mantenedor de precios"));
   }, []);
 
-  function actualizarEdicion(productoId: string, cambio: Partial<{ modo: "FIJO" | "PORCENTAJE"; valor: string }>) {
+  function actualizarEdicion(productoId: string, cambio: Partial<Edicion>) {
     setEdicion((previo) => ({ ...previo, [productoId]: { ...previo[productoId], ...cambio } }));
   }
 
@@ -59,6 +67,7 @@ export function PreciosVenta() {
         modo: e.modo,
         precioFijoClp: e.modo === "FIJO" ? Number(e.valor) : undefined,
         porcentajeMargen: e.modo === "PORCENTAJE" ? Number(e.valor) : undefined,
+        afectoIva: e.afectoIva,
       });
       setMensaje("Precio actualizado.");
       await cargar();
@@ -73,7 +82,8 @@ export function PreciosVenta() {
       <p style={{ marginTop: -10, color: "var(--texto-suave)" }}>
         Define el precio de venta de cada producto en pesos (fijo) o como porcentaje de margen sobre el último valor
         declarado en su llegada (Mercado Libre / liquidación). Sin valor de referencia todavía, el modo porcentaje no
-        calcula un precio — nunca se inventa una cifra.
+        calcula un precio — nunca se inventa una cifra. El IVA (19%) es opcional por producto: algunos bienes están
+        exentos.
       </p>
 
       {error && <div className="mensaje-error">{error}</div>}
@@ -89,13 +99,15 @@ export function PreciosVenta() {
               <th>Valor referencia</th>
               <th>Modo</th>
               <th>Valor</th>
-              <th>Precio de venta</th>
+              <th>Afecto a IVA</th>
+              <th>Precio neto</th>
+              <th>Precio con IVA</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {filas.map((f) => {
-              const e = edicion[f.productoId] ?? { modo: "PORCENTAJE" as const, valor: "" };
+              const e = edicion[f.productoId] ?? { modo: "PORCENTAJE" as const, valor: "", afectoIva: true };
               return (
                 <tr key={f.productoId}>
                   <td>{f.codigo}</td>
@@ -118,8 +130,17 @@ export function PreciosVenta() {
                       placeholder={e.modo === "FIJO" ? "CLP" : "%"}
                     />
                   </td>
+                  <td style={{ textAlign: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={e.afectoIva}
+                      onChange={(ev) => actualizarEdicion(f.productoId, { afectoIva: ev.target.checked })}
+                      title="Afecto a IVA (19%)"
+                    />
+                  </td>
+                  <td>{f.precio?.precioVentaCalculado ? formatoClp.format(Number(f.precio.precioVentaCalculado)) : "Sin calcular"}</td>
                   <td>
-                    <strong>{f.precio?.precioVentaCalculado ? formatoClp.format(Number(f.precio.precioVentaCalculado)) : "Sin calcular"}</strong>
+                    <strong>{f.precio?.precioVentaConIva ? formatoClp.format(Number(f.precio.precioVentaConIva)) : "Sin calcular"}</strong>
                   </td>
                   <td>
                     <button className="btn btn-secundario" onClick={() => guardar(f.productoId)}>Guardar</button>
@@ -127,7 +148,7 @@ export function PreciosVenta() {
                 </tr>
               );
             })}
-            {filas.length === 0 && <tr><td colSpan={8} style={{ color: "var(--texto-suave)" }}>Sin productos registrados.</td></tr>}
+            {filas.length === 0 && <tr><td colSpan={10} style={{ color: "var(--texto-suave)" }}>Sin productos registrados.</td></tr>}
           </tbody>
         </table>
       </div>

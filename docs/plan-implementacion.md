@@ -171,7 +171,9 @@ porcentaje de margen.
    precio fijo en pesos o porcentaje de margen sobre el valor declarado en la llegada
    más reciente del producto, con el precio calculado siempre persistido (nunca
    recomputado silenciosamente en el momento de leer, para poder auditar qué precio
-   estuvo vigente).
+   estuvo vigente). A pedido explícito, incluye además la opción de IVA (19%) por
+   producto (`afectoIva`, afecto por defecto): junto al precio neto se persiste el
+   precio con IVA, y un producto puede marcarse exento desde el mismo mantenedor.
 
 Decisiones tomadas explícitamente (confirmadas con el usuario antes de tocar el modelo
 de datos):

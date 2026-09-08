@@ -120,9 +120,12 @@ diseño). `llegadas_producto` es un registro histórico por fila importada (nunc
 actualiza una fila existente con una llegada nueva: cada llegada es un evento propio),
 con `movimiento_id` (único, opcional) apuntando al movimiento de inventario real que
 generó si `cantidad_enviada > 0`. `precios_venta` tiene una fila **por producto**
-(`@@unique([productoId])`): `precio_venta_calculado` se recalcula y persiste cada vez
-que cambia el modo, el margen/precio fijo, o llega un nuevo `valor_referencia_clp` desde
-una llegada — nunca se computa "al vuelo" en el momento de leer.
+(`@@unique([productoId])`): `precio_venta_calculado` (siempre el precio **neto**, sin
+impuestos) se recalcula y persiste cada vez que cambia el modo, el margen/precio fijo,
+o llega un nuevo `valor_referencia_clp` desde una llegada — nunca se computa "al vuelo"
+en el momento de leer. `afecto_iva` (booleano, por defecto `true`) indica si el producto
+lleva IVA (19%, tasa fija del sistema); `precio_venta_con_iva` se recalcula y persiste
+junto al neto en ese mismo momento, aplicando la tasa solo si `afecto_iva` es `true`.
 
 `Producto` ganó tres columnas opcionales para esta fase: `codigo_mercado_libre`
 (indexado, **no** único — una misma publicación de Mercado Libre agrupa varias

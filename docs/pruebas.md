@@ -29,11 +29,11 @@ residuales de una corrida anterior):
 ✓ tests/periodos.test.ts (4 tests)
 ✓ tests/multimoneda.test.ts (3 tests)
 ✓ tests/api.test.ts (3 tests)
-✓ tests/precios.test.ts (7 tests)
+✓ tests/precios.test.ts (10 tests)
 ✓ tests/adjuntos.test.ts (4 tests)
 
 Test Files  16 passed (16)
-     Tests  71 passed (71)
+     Tests  74 passed (74)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -132,7 +132,10 @@ Adicionalmente se prueba (más allá del mínimo pedido):
   llegada; sin valor de referencia todavía, el precio calculado queda vacío (nunca
   inventa una cifra); una llegada posterior recalcula el precio automáticamente si el
   modo es porcentaje; rechaza guardar sin el dato requerido según el modo; rechaza
-  actualizar el precio de un producto de otra empresa.
+  actualizar el precio de un producto de otra empresa; IVA (19%) afecto por defecto
+  suma el 19% al precio neto; un producto marcado no afecto a IVA no le suma nada;
+  cambiar solo el margen/precio fijo conserva la opción de IVA elegida previamente
+  para ese producto.
 
 ## Evidencia de la aplicación real (no solo servicios)
 

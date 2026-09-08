@@ -148,9 +148,18 @@ iniciado en este entregable).
   automáticamente desde `modules/cargas` cada vez que llega una fila de
   `LLEGADA_PRODUCTOS` con valor declarado, dentro de la misma transacción que registra
   la llegada — no requiere ninguna acción manual para mantenerse al día.
-- Cubierto por 7 pruebas (`tests/precios.test.ts`) y por el smoke test de UI (sube una
-  llegada real, configura un margen porcentual, y verifica que el precio calculado se
-  obtiene del valor real declarado en el Excel, no de una cifra arbitraria).
+- IVA (19%) opcional por producto (`afectoIva`, por defecto `true`): junto al precio
+  neto (`precioVentaCalculado`) se persiste también el precio con IVA
+  (`precioVentaConIva`), recalculado en el mismo momento que el neto — nunca "al
+  vuelo" al leer. Un producto puede marcarse como no afecto (exento) desde el
+  mantenedor; si no se envía `afectoIva` en una actualización, se conserva la última
+  opción elegida para ese producto en vez de resetearla a afecto.
+- Cubierto por 10 pruebas (`tests/precios.test.ts`, incluye 3 específicas de IVA: valor
+  por defecto afecto, producto exento, y que cambiar solo el margen conserva la
+  opción de IVA ya elegida) y por el smoke test de UI (sube una llegada real, configura
+  un margen porcentual, verifica que el precio calculado se obtiene del valor real
+  declarado en el Excel —no de una cifra arbitraria—, y verifica que desmarcar "Afecto a
+  IVA" deja el precio con IVA igual al neto).
 - Pendiente: historial de cambios de precio (hoy solo se guarda el estado vigente, no
   quién cambió qué y cuándo más allá de `actualizadoPorId`/`actualizadoEn`); reglas de
   precio por lote de compra o por canal de venta (hoy es un precio único por producto).

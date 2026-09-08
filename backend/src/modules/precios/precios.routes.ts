@@ -15,6 +15,7 @@ const actualizarSchema = z.object({
   modo: z.enum(["FIJO", "PORCENTAJE"]),
   precioFijoClp: z.union([z.number(), z.string()]).optional(),
   porcentajeMargen: z.union([z.number(), z.string()]).optional(),
+  afectoIva: z.boolean().optional(),
 });
 
 preciosRouter.put("/:productoId", requierePermiso("precios", "modificar"), async (req, res) => {

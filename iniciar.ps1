@@ -45,6 +45,16 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 Log "Node.js disponible: $(node --version)"
 
 # ---------------------------------------------------------------------------
+# Detiene cualquier backend/frontend que haya quedado corriendo de un
+# intento anterior ANTES de tocar dependencias o generar el cliente de
+# Prisma: en Windows, un proceso vivo que todavía tiene abierto
+# query_engine-windows.dll.node hace que 'prisma generate' falle con un
+# EPERM al intentar sobrescribirlo.
+# ---------------------------------------------------------------------------
+New-Item -ItemType Directory -Force -Path "logs", ".pids" | Out-Null
+& (Join-Path $Raiz "detener.ps1") -Silencioso
+
+# ---------------------------------------------------------------------------
 # 2) backend\.env: lo crea desde .env.example si no existe, y se lee el
 #    usuario/contraseña/base/puerto que la aplicación va a usar. El puerto
 #    importa especialmente si ya tienes más de una instalación de PostgreSQL
@@ -185,13 +195,9 @@ Ejecutar "npm run seed" { npm run seed }
 Pop-Location
 
 # ---------------------------------------------------------------------------
-# 6) Detiene una instancia previa (si quedó corriendo) y levanta backend y
-#    frontend en segundo plano.
+# 6) Levanta backend y frontend en segundo plano (la instancia previa ya se
+#    detuvo al principio del script, antes de generar el cliente de Prisma).
 # ---------------------------------------------------------------------------
-& (Join-Path $Raiz "detener.ps1") -Silencioso
-
-New-Item -ItemType Directory -Force -Path "logs", ".pids" | Out-Null
-
 Log "Iniciando backend (API) en http://localhost:4000 ..."
 $backend = Start-Process -FilePath "cmd.exe" `
   -ArgumentList "/c", "npm run dev > `"$Raiz\logs\backend.log`" 2>&1" `

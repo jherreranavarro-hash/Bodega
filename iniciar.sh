@@ -13,6 +13,26 @@ mkdir -p logs .pids
 log() { echo "==> $*"; }
 
 # ---------------------------------------------------------------------------
+# Detiene cualquier backend/frontend que haya quedado corriendo de un
+# intento anterior ANTES de tocar dependencias o regenerar el cliente de
+# Prisma (en Windows un proceso vivo que aún tiene abierto el motor de
+# Prisma hace fallar 'prisma generate'; en Linux no es tan estricto, pero
+# igual es mejor no dejar procesos duplicados corriendo).
+# ---------------------------------------------------------------------------
+detener_si_corre() {
+  local pidfile="$1"
+  [ -f "$pidfile" ] || return 0
+  local pid; pid="$(cat "$pidfile")"
+  # Señal al grupo de procesos completo (PID negativo), no solo al proceso
+  # envoltorio: npm/tsx/vite crean procesos hijos que sobreviven si solo se
+  # mata el padre.
+  kill -TERM -- "-$pid" >/dev/null 2>&1 || kill "$pid" >/dev/null 2>&1 || true
+  rm -f "$pidfile"
+}
+detener_si_corre .pids/backend.pid
+detener_si_corre .pids/frontend.pid
+
+# ---------------------------------------------------------------------------
 # 1) backend/.env: lo crea desde .env.example si no existe, y se lee el
 #    usuario/contraseña/base/puerto que la aplicación va a usar. El puerto
 #    importa si hay más de una instalación de PostgreSQL en la máquina (cada
@@ -92,21 +112,9 @@ log "Sembrando datos de demostración (idempotente, seguro repetir)..."
 (cd backend && npm run seed)
 
 # ---------------------------------------------------------------------------
-# 5) Backend y frontend en segundo plano.
+# 5) Backend y frontend en segundo plano (la instancia previa ya se detuvo
+#    al principio del script).
 # ---------------------------------------------------------------------------
-detener_si_corre() {
-  local pidfile="$1"
-  [ -f "$pidfile" ] || return 0
-  local pid; pid="$(cat "$pidfile")"
-  # Señal al grupo de procesos completo (PID negativo), no solo al proceso
-  # envoltorio: npm/tsx/vite crean procesos hijos que sobreviven si solo se
-  # mata el padre.
-  kill -TERM -- "-$pid" >/dev/null 2>&1 || kill "$pid" >/dev/null 2>&1 || true
-  rm -f "$pidfile"
-}
-detener_si_corre .pids/backend.pid
-detener_si_corre .pids/frontend.pid
-
 log "Iniciando backend (API) en http://localhost:4000 ..."
 (cd backend && exec npm run dev) > "$RAIZ/logs/backend.log" 2>&1 < /dev/null &
 disown

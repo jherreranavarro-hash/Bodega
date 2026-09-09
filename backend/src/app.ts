@@ -6,12 +6,20 @@ import { productosRouter } from "./modules/productos/productos.routes.js";
 import { bodegasRouter, ubicacionesRouter } from "./modules/maestros/bodegas.routes.js";
 import { proveedoresRouter } from "./modules/maestros/proveedores.routes.js";
 import { catalogosRouter } from "./modules/maestros/catalogos.routes.js";
+import { parametrosRouter } from "./modules/maestros/parametros.routes.js";
+import { adjuntosRouter } from "./modules/adjuntos/adjuntos.routes.js";
+import { administracionRouter } from "./modules/administracion/administracion.routes.js";
 import { cargasRouter } from "./modules/cargas/carga.routes.js";
 import { comprasRouter } from "./modules/compras/compras.routes.js";
 import { salidasRouter } from "./modules/salidas/salidas.routes.js";
+import { preparacionesRouter } from "./modules/preparaciones/preparaciones.routes.js";
 import { transferenciasRouter } from "./modules/transferencias/transferencias.routes.js";
+import { devolucionesRouter } from "./modules/devoluciones/devoluciones.routes.js";
 import { ajustesRouter } from "./modules/ajustes/ajustes.routes.js";
 import { indicadoresRouter } from "./modules/indicadores/indicadores.routes.js";
+import { alertasRouter } from "./modules/alertas/alertas.routes.js";
+import { analiticaRouter } from "./modules/analitica/analitica.routes.js";
+import { preciosRouter } from "./modules/precios/precios.routes.js";
 
 export function crearApp() {
   const app = express();
@@ -26,12 +34,20 @@ export function crearApp() {
   app.use("/api/ubicaciones", ubicacionesRouter);
   app.use("/api/proveedores", proveedoresRouter);
   app.use("/api/catalogos", catalogosRouter);
+  app.use("/api/parametros", parametrosRouter);
+  app.use("/api/adjuntos", adjuntosRouter);
+  app.use("/api/administracion", administracionRouter);
   app.use("/api/cargas", cargasRouter);
   app.use("/api/compras", comprasRouter);
   app.use("/api/salidas", salidasRouter);
+  app.use("/api/preparaciones", preparacionesRouter);
   app.use("/api/transferencias", transferenciasRouter);
+  app.use("/api/devoluciones", devolucionesRouter);
   app.use("/api", ajustesRouter);
   app.use("/api/indicadores", indicadoresRouter);
+  app.use("/api/alertas", alertasRouter);
+  app.use("/api/analitica", analiticaRouter);
+  app.use("/api/precios", preciosRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     // eslint-disable-next-line no-console

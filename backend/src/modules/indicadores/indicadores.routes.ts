@@ -7,6 +7,7 @@ import {
   resumenDisponibilidad,
   exactitudInventario,
 } from "./indicadores.service.js";
+import { reconciliarSaldos } from "../inventario/reconciliacion.service.js";
 
 export const indicadoresRouter = Router();
 indicadoresRouter.use(requiereAutenticacion);
@@ -36,4 +37,10 @@ indicadoresRouter.get("/exactitud", requierePermiso("indicadores", "consultar"),
   const { bodegaId } = req.query as { bodegaId?: string };
   if (!bodegaId) return res.status(400).json({ error: "bodegaId es requerido" });
   res.json(await exactitudInventario(bodegaId));
+});
+
+// Calidad de datos: reconstruye saldos_inventario desde movimientos_inventario
+// (la fuente de verdad) y reporta cualquier desviación de la proyección.
+indicadoresRouter.get("/reconciliacion", requierePermiso("indicadores", "consultar"), async (req, res) => {
+  res.json(await reconciliarSaldos(req.usuario!.empresaId));
 });

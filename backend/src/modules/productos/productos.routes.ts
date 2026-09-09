@@ -25,14 +25,57 @@ const productoSchema = z.object({
   plazoReposicionDias: z.number().int().positive().optional(),
 });
 
-// Consultar: catálogo con búsqueda por código/nombre/código de barras y filtro por activo.
+// Campos declarados en la llegada más reciente de cada producto (Grupo, Condición,
+// Status, Sub Status, Grade) para poder filtrar/mostrar en el catálogo sin promoverlos
+// a columnas propias de Producto — decisión explícita del usuario: solo agregar
+// filtros/columnas en pantallas existentes referenciando la última llegada.
+const CAMPOS_LLEGADA = ["grupo", "condicion", "status", "subStatus", "grade"] as const;
+
+// Se registra antes de "/:id" para que Express no confunda "filtros" con un id de producto.
+productosRouter.get("/filtros/llegada", requierePermiso("productos", "consultar"), async (req, res) => {
+  const llegadas = await prisma.llegadaProducto.findMany({
+    where: { empresaId: req.usuario!.empresaId },
+    select: { grupo: true, condicion: true, status: true, subStatus: true, grade: true },
+  });
+  const distinto = (campo: (typeof CAMPOS_LLEGADA)[number]) =>
+    [...new Set(llegadas.map((l) => l[campo]).filter((v): v is string => !!v))].sort();
+  res.json(Object.fromEntries(CAMPOS_LLEGADA.map((campo) => [campo, distinto(campo)])));
+});
+
+// Consultar: catálogo con búsqueda por código/nombre/código de barras, filtro por
+// activo, y filtro por los campos de la llegada más reciente de cada producto.
 productosRouter.get("/", requierePermiso("productos", "consultar"), async (req, res) => {
-  const { q, activo, categoriaId } = req.query as Record<string, string | undefined>;
+  const { q, activo, categoriaId, grupo, condicion, status, subStatus, grade } = req.query as Record<string, string | undefined>;
+
+  let idsPorLlegada: string[] | undefined;
+  if (grupo || condicion || status || subStatus || grade) {
+    const llegadas = await prisma.llegadaProducto.findMany({
+      where: { empresaId: req.usuario!.empresaId },
+      orderBy: { fechaLlegada: "desc" },
+      select: { productoId: true, grupo: true, condicion: true, status: true, subStatus: true, grade: true },
+    });
+    const ultimaPorProducto = new Map<string, (typeof llegadas)[number]>();
+    for (const l of llegadas) {
+      if (!ultimaPorProducto.has(l.productoId)) ultimaPorProducto.set(l.productoId, l);
+    }
+    idsPorLlegada = [...ultimaPorProducto.values()]
+      .filter(
+        (l) =>
+          (!grupo || l.grupo === grupo) &&
+          (!condicion || l.condicion === condicion) &&
+          (!status || l.status === status) &&
+          (!subStatus || l.subStatus === subStatus) &&
+          (!grade || l.grade === grade)
+      )
+      .map((l) => l.productoId);
+  }
+
   const productos = await prisma.producto.findMany({
     where: {
       empresaId: req.usuario!.empresaId,
       activo: activo !== undefined ? activo === "true" : undefined,
       categoriaId: categoriaId || undefined,
+      id: idsPorLlegada ? { in: idsPorLlegada } : undefined,
       OR: q
         ? [
             { codigo: { contains: q, mode: "insensitive" } },
@@ -41,11 +84,16 @@ productosRouter.get("/", requierePermiso("productos", "consultar"), async (req, 
           ]
         : undefined,
     },
-    include: { categoria: true, marca: true, unidadBase: true },
+    include: {
+      categoria: true,
+      marca: true,
+      unidadBase: true,
+      llegadas: { orderBy: { fechaLlegada: "desc" }, take: 1 },
+    },
     orderBy: { codigo: "asc" },
     take: 200,
   });
-  res.json(productos);
+  res.json(productos.map(({ llegadas, ...producto }) => ({ ...producto, ultimaLlegada: llegadas[0] ?? null })));
 });
 
 productosRouter.get("/:id", requierePermiso("productos", "consultar"), async (req, res) => {

@@ -13,11 +13,18 @@ const RECURSOS_ACCIONES: [string, string[]][] = [
   ["recepciones", ["consultar", "crear"]],
   ["solicitudes_salida", ["consultar", "crear", "aprobar"]],
   ["reservas", ["consultar", "crear"]],
+  ["preparaciones", ["consultar", "crear", "ejecutar"]],
   ["despachos", ["consultar", "ejecutar"]],
   ["transferencias", ["consultar", "ejecutar"]],
+  ["devoluciones", ["consultar", "crear", "ejecutar"]],
   ["conteos", ["consultar", "crear", "ejecutar"]],
   ["ajustes", ["consultar", "crear", "aprobar"]],
   ["indicadores", ["consultar"]],
+  ["alertas", ["consultar", "ejecutar"]],
+  ["parametros", ["consultar", "modificar"]],
+  ["adjuntos", ["consultar", "crear"]],
+  ["administracion", ["consultar", "modificar"]],
+  ["precios", ["consultar", "modificar"]],
 ];
 
 const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.accion" o "*" */ }> = {
@@ -26,22 +33,22 @@ const ROLES: Record<string, { nombre: string; permisos: string[] /* "recurso.acc
     nombre: "Jefe de Bodega",
     permisos: [
       "productos.consultar", "bodegas.*", "ubicaciones.*", "cargas.consultar", "cargas.aprobar",
-      "compras.consultar", "recepciones.*", "solicitudes_salida.*", "reservas.*", "despachos.*",
-      "transferencias.*", "conteos.*", "ajustes.consultar", "ajustes.aprobar", "indicadores.consultar",
+      "compras.consultar", "recepciones.*", "solicitudes_salida.*", "reservas.*", "preparaciones.*", "despachos.*",
+      "transferencias.*", "devoluciones.*", "conteos.*", "ajustes.consultar", "ajustes.aprobar", "indicadores.consultar", "alertas.*", "adjuntos.*", "precios.consultar",
     ],
   },
   operador: {
     nombre: "Operador de Bodega",
-    permisos: ["productos.consultar", "recepciones.crear", "reservas.crear", "despachos.ejecutar", "transferencias.ejecutar", "conteos.ejecutar", "indicadores.consultar"],
+    permisos: ["productos.consultar", "recepciones.crear", "reservas.crear", "preparaciones.consultar", "preparaciones.crear", "preparaciones.ejecutar", "despachos.ejecutar", "transferencias.ejecutar", "devoluciones.consultar", "devoluciones.crear", "conteos.ejecutar", "indicadores.consultar", "adjuntos.consultar", "adjuntos.crear"],
   },
   compras: {
     nombre: "Compras",
-    permisos: ["productos.consultar", "proveedores.*", "compras.*", "recepciones.consultar", "indicadores.consultar"],
+    permisos: ["productos.consultar", "proveedores.*", "compras.*", "recepciones.consultar", "indicadores.consultar", "alertas.*", "cargas.*", "precios.*", "bodegas.consultar"],
   },
   solicitante: { nombre: "Solicitante", permisos: ["productos.consultar", "solicitudes_salida.consultar", "solicitudes_salida.crear"] },
-  aprobador: { nombre: "Aprobador", permisos: ["compras.aprobar", "cargas.aprobar", "ajustes.aprobar", "solicitudes_salida.aprobar", "indicadores.consultar"] },
-  auditor: { nombre: "Auditor", permisos: ["productos.consultar", "bodegas.consultar", "ubicaciones.consultar", "cargas.consultar", "compras.consultar", "recepciones.consultar", "solicitudes_salida.consultar", "reservas.consultar", "despachos.consultar", "transferencias.consultar", "conteos.consultar", "ajustes.consultar", "indicadores.consultar"] },
-  gerencia: { nombre: "Gerencia", permisos: ["indicadores.consultar", "productos.consultar", "compras.consultar"] },
+  aprobador: { nombre: "Aprobador", permisos: ["compras.aprobar", "cargas.aprobar", "ajustes.aprobar", "solicitudes_salida.aprobar", "indicadores.consultar", "alertas.consultar"] },
+  auditor: { nombre: "Auditor", permisos: ["productos.consultar", "bodegas.consultar", "ubicaciones.consultar", "cargas.consultar", "compras.consultar", "recepciones.consultar", "solicitudes_salida.consultar", "reservas.consultar", "despachos.consultar", "transferencias.consultar", "conteos.consultar", "ajustes.consultar", "indicadores.consultar", "alertas.consultar", "adjuntos.consultar", "precios.consultar"] },
+  gerencia: { nombre: "Gerencia", permisos: ["indicadores.consultar", "productos.consultar", "compras.consultar", "alertas.consultar", "precios.consultar"] },
 };
 
 async function main() {
@@ -225,23 +232,38 @@ async function main() {
     update: {},
     create: { empresaId: empresa.id, categoria: "AJUSTE", codigo: "ERROR_CONTEO", nombre: "Error de conteo anterior", requiereEvidencia: false },
   });
+  await prisma.motivo.upsert({
+    where: { empresaId_categoria_codigo: { empresaId: empresa.id, categoria: "DEVOLUCION", codigo: "CLIENTE_RECHAZO" } },
+    update: {},
+    create: { empresaId: empresa.id, categoria: "DEVOLUCION", codigo: "CLIENTE_RECHAZO", nombre: "Rechazo del cliente", requiereEvidencia: false },
+  });
+  await prisma.motivo.upsert({
+    where: { empresaId_categoria_codigo: { empresaId: empresa.id, categoria: "DEVOLUCION", codigo: "PRODUCTO_DEFECTUOSO" } },
+    update: {},
+    create: { empresaId: empresa.id, categoria: "DEVOLUCION", codigo: "PRODUCTO_DEFECTUOSO", nombre: "Producto defectuoso", requiereEvidencia: true },
+  });
+  await prisma.motivo.upsert({
+    where: { empresaId_categoria_codigo: { empresaId: empresa.id, categoria: "BAJA", codigo: "DANO_IRREPARABLE" } },
+    update: {},
+    create: { empresaId: empresa.id, categoria: "BAJA", codigo: "DANO_IRREPARABLE", nombre: "Daño irreparable", requiereEvidencia: true },
+  });
 
-  console.log("Creando usuarios demo (contraseña: Demo1234!) ...");
-  const passwordHash = await bcrypt.hash("Demo1234!", 10);
-  for (const [email, nombre, rolCodigo] of [
-    ["admin@bodegademo.cl", "Administradora del Sistema", "administrador"],
-    ["jefe.bodega@bodegademo.cl", "Jefe de Bodega", "jefe_bodega"],
-    ["operador@bodegademo.cl", "Operador de Bodega", "operador"],
-    ["compras@bodegademo.cl", "Analista de Compras", "compras"],
-    ["solicitante@bodegademo.cl", "Solicitante de Área", "solicitante"],
-    ["aprobador@bodegademo.cl", "Aprobador", "aprobador"],
-    ["auditor@bodegademo.cl", "Auditor Interno", "auditor"],
-    ["gerencia@bodegademo.cl", "Gerencia", "gerencia"],
+  console.log("Creando usuarios demo (contraseñas individuales, ver README.md) ...");
+  for (const [email, nombre, rolCodigo, password] of [
+    ["admin@bodegademo.cl", "Administradora del Sistema", "administrador", "ASgSrfXMMQ*3"],
+    ["jefe.bodega@bodegademo.cl", "Jefe de Bodega", "jefe_bodega", "TdsdEQRSbg@3"],
+    ["operador@bodegademo.cl", "Operador de Bodega", "operador", "HTB9GHm7PU=6"],
+    ["compras@bodegademo.cl", "Analista de Compras", "compras", "WzFucgkvri=7"],
+    ["solicitante@bodegademo.cl", "Solicitante de Área", "solicitante", "sAinLEi6d8+5"],
+    ["aprobador@bodegademo.cl", "Aprobador", "aprobador", "znNvKKFXhF*4"],
+    ["auditor@bodegademo.cl", "Auditor Interno", "auditor", "9Dbm4vXQem@3"],
+    ["gerencia@bodegademo.cl", "Gerencia", "gerencia", "MNDm8tzvEr*3"],
   ] as const) {
     const rol = await prisma.rol.findUniqueOrThrow({ where: { codigo: rolCodigo } });
+    const passwordHash = await bcrypt.hash(password, 10);
     await prisma.usuario.upsert({
       where: { email },
-      update: {},
+      update: { passwordHash },
       create: { empresaId: empresa.id, email, nombre, passwordHash, rolId: rol.id },
     });
   }
@@ -281,6 +303,31 @@ async function main() {
         { campo: "lote_codigo", obligatorio: false, formato: "texto" },
         { campo: "fecha_vencimiento", obligatorio: false, formato: "YYYY-MM-DD" },
         { campo: "costo_unitario", obligatorio: false, formato: "decimal >= 0", observacion: "si se omite, el costo queda pendiente (nunca se asume cero)" },
+      ],
+    },
+  });
+  await prisma.plantillaCarga.upsert({
+    where: { entidad_version: { entidad: "LLEGADA_PRODUCTOS", version: "1.0" } },
+    update: {},
+    create: {
+      entidad: "LLEGADA_PRODUCTOS",
+      version: "1.0",
+      descripcionCampos: [
+        { campo: "grupo", obligatorio: false, formato: "texto" },
+        { campo: "codigo", obligatorio: true, formato: "texto", ejemplo: "PROD-200", observacion: "código interno; si no existe, crea el producto" },
+        { campo: "codigo_ml", obligatorio: false, formato: "texto", observacion: "código de la publicación en Mercado Libre" },
+        { campo: "codigo_original", obligatorio: false, formato: "texto", observacion: "código del proveedor/origen" },
+        { campo: "titulo", obligatorio: false, formato: "texto", observacion: "obligatorio solo si el producto no existe todavía (se usa como nombre)" },
+        { campo: "condicion", obligatorio: false, formato: "texto", ejemplo: "Usado" },
+        { campo: "status", obligatorio: false, formato: "texto" },
+        { campo: "sub_status", obligatorio: false, formato: "texto" },
+        { campo: "grade", obligatorio: false, formato: "texto", ejemplo: "A" },
+        { campo: "cantidad_solicitada", obligatorio: false, formato: "decimal >= 0", observacion: "informativo, no mueve stock" },
+        { campo: "cantidad_colectada", obligatorio: false, formato: "decimal >= 0", observacion: "informativo, no mueve stock" },
+        { campo: "cantidad_enviada", obligatorio: false, formato: "decimal >= 0", observacion: "si es mayor a 0, genera una recepción real de inventario" },
+        { campo: "peso", obligatorio: false, formato: "decimal >= 0" },
+        { campo: "valor", obligatorio: false, formato: "decimal >= 0", observacion: "valor unitario en pesos (CLP); si se omite, el costo queda pendiente" },
+        { campo: "valor_en_usd", obligatorio: false, formato: "decimal >= 0", observacion: "solo referencial" },
       ],
     },
   });

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { EstadoCarga } from "@prisma/client";
 import { prisma } from "../src/lib/prisma.js";
 import { crearEscenario } from "./fixtures.js";
 import { recibirArchivo, validarYSimular, aprobarCarga, ejecutarCarga } from "../src/modules/cargas/carga.service.js";
@@ -74,6 +75,53 @@ describe("Caso 8: importar cajas con conversión a unidades", () => {
     expect(propuesta.cantidadOriginal).toBe(5);
     expect(propuesta.factorAUnidadBase).toBe(12);
     expect(propuesta.cantidadBase).toBe(60);
+  });
+});
+
+describe("Endurecimiento: límite de filas por archivo", () => {
+  it("rechaza un archivo con más filas que el máximo permitido", async () => {
+    const e = await crearEscenario();
+    const encabezado = "codigo,nombre,unidad_base_codigo\n";
+    const filas = Array.from({ length: 5001 }, (_, i) => `PROD-MASIVO-${i},Producto masivo ${i},UN\n`).join("");
+    const contenido = Buffer.from(encabezado + filas);
+    await expect(
+      recibirArchivo({ empresaId: e.empresa.id, entidad: "PRODUCTOS", modo: "CREACION_Y_ACTUALIZACION", nombreArchivo: "masivo.csv", contenido, usuarioId: e.usuario.id })
+    ).rejects.toThrow();
+  });
+});
+
+describe("Una carga RECHAZADA (ejecución revertida, p. ej. por un timeout) se puede reintentar", () => {
+  it("subir el mismo archivo otra vez crea una carga nueva en vez de devolver la rechazada para siempre", async () => {
+    const e = await crearEscenario();
+    const contenido = Buffer.from(
+      `producto_codigo,bodega_codigo,ubicacion_codigo,cantidad,unidad_codigo,costo_unitario\n${e.producto.codigo},${e.bodega.codigo},${e.ubicacionAlmacen.codigo},10,UN,100\n`
+    );
+    const params = { empresaId: e.empresa.id, entidad: "INVENTARIO_INICIAL", modo: "CREACION_Y_ACTUALIZACION" as const, nombreArchivo: "inicial.csv", contenido, usuarioId: e.usuario.id };
+
+    const carga = await recibirArchivo(params);
+    await validarYSimular(carga.id);
+    await aprobarCarga(carga.id, e.usuario.id);
+    // Simula una ejecución que se revirtió (p. ej. un timeout de transacción
+    // en un archivo grande): la carga queda RECHAZADA sin haber tocado el
+    // inventario, exactamente como deja ejecutarCarga tras un rollback.
+    await prisma.cargaDatos.update({ where: { id: carga.id }, data: { estado: EstadoCarga.RECHAZADA } });
+
+    const reintento = await recibirArchivo(params);
+    expect(reintento.id).not.toBe(carga.id);
+    expect(reintento.estado).toBe("RECIBIDA");
+
+    // La carga vieja y rota ya no existe (se descartó, no se dejó huérfana).
+    const vieja = await prisma.cargaDatos.findUnique({ where: { id: carga.id } });
+    expect(vieja).toBeNull();
+
+    // Y el reintento completa el flujo normalmente.
+    await validarYSimular(reintento.id);
+    await aprobarCarga(reintento.id, e.usuario.id);
+    const ejecutada = await ejecutarCarga(reintento.id, e.usuario.id);
+    expect(ejecutada.estado).toBe("EJECUTADA");
+
+    const disponibilidad = await calcularDisponibilidad(e.producto.id, e.bodega.id);
+    expect(disponibilidad.stockFisicoTotal.toString()).toBe("10");
   });
 });
 

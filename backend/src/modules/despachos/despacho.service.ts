@@ -1,6 +1,7 @@
 import { EstadoDespacho, EstadoReserva, MetodoValorizacion, Prisma, TipoOperacion } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { registrarMovimiento, crearOperacion } from "../inventario/inventario.service.js";
+import { registrarDemandaAtendida } from "../analitica/demanda.service.js";
 import { ErrorValidacion, ErrorStockInsuficiente } from "../../lib/errors.js";
 
 export interface LineaDespacho {
@@ -62,6 +63,13 @@ export async function contabilizarDespacho(datos: DatosDespacho) {
   if (datos.detalle.length === 0) throw new ErrorValidacion("El despacho no tiene líneas");
 
   return prisma.$transaction(async (tx) => {
+    if (datos.preparacionId) {
+      const preparacion = await tx.preparacion.findUniqueOrThrow({ where: { id: datos.preparacionId } });
+      if (preparacion.estado !== "LISTA") {
+        throw new ErrorValidacion("La preparación referenciada debe estar en estado LISTA antes de despachar");
+      }
+    }
+
     const operacion = await crearOperacion(tx, {
       empresaId: datos.empresaId,
       bodegaId: datos.bodegaId,
@@ -158,6 +166,8 @@ export async function contabilizarDespacho(datos: DatosDespacho) {
           cantidad,
         },
       });
+
+      await registrarDemandaAtendida(tx, { productoId: linea.productoId, bodegaId: datos.bodegaId, fecha: datos.fechaEfectiva, cantidad });
     }
 
     return despacho;

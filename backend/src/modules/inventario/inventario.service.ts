@@ -1,6 +1,7 @@
 import { Prisma, EstadoInventario, EstadoOperacion, EstadoReserva, TipoOperacion } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { ErrorStockInsuficiente, ErrorValidacion } from "../../lib/errors.js";
+import { verificarPeriodoAbierto } from "./periodos.service.js";
 
 // Postgres trata cada NULL como distinto en comparaciones normales; para que
 // "sin lote" y "sin serie" cuenten como un único valor de clave de negocio,
@@ -155,6 +156,7 @@ export async function registrarMovimiento(tx: Tx, p: ParametrosMovimiento): Prom
       loteId: p.loteId ?? null,
       serieId: p.serieId ?? null,
       estadoInventario: estadoDestino,
+      estadoInventarioOrigen: p.ubicacionOrigenId ? estadoOrigen : null,
       cantidad,
       costoUnitario: p.costoUnitario != null ? new Prisma.Decimal(p.costoUnitario) : null,
       fechaEfectiva: p.fechaEfectiva,
@@ -176,8 +178,12 @@ export async function crearOperacion(
     autorizadoPorId?: string;
     estado?: EstadoOperacion;
     observacion?: string;
+    /** Excepción explícita para registrar una corrección autorizada dentro de un período ya cerrado. */
+    permitirPeriodoCerrado?: boolean;
   }
 ) {
+  await verificarPeriodoAbierto(p.empresaId, p.fechaEfectiva, p.permitirPeriodoCerrado);
+
   return tx.operacionInventario.create({
     data: {
       empresaId: p.empresaId,

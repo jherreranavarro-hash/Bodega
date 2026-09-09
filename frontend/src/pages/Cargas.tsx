@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ErrorApi, obtenerToken } from "../api/client";
+import { useBodegas } from "../hooks/useBodegas";
 
 interface CargaDatos {
   id: string;
@@ -15,7 +16,7 @@ interface CargaDatos {
   creadoEn: string;
 }
 
-const ENTIDADES = ["PRODUCTOS", "INVENTARIO_INICIAL"];
+const ENTIDADES = ["PRODUCTOS", "INVENTARIO_INICIAL", "LLEGADA_PRODUCTOS"];
 const MODOS = [
   ["CREACION_Y_ACTUALIZACION", "Creación y actualización"],
   ["SOLO_CREACION", "Solo creación"],
@@ -24,12 +25,16 @@ const MODOS = [
 ];
 
 export function Cargas() {
+  const { bodegas } = useBodegas();
   const [cargas, setCargas] = useState<CargaDatos[]>([]);
   const [entidad, setEntidad] = useState(ENTIDADES[0]);
   const [modo, setModo] = useState(MODOS[0][0]);
   const [archivo, setArchivo] = useState<File | null>(null);
+  const [bodegaDestinoId, setBodegaDestinoId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
+
+  const esLlegadaProductos = entidad === "LLEGADA_PRODUCTOS";
 
   async function cargarLista() {
     setCargas(await api.get<CargaDatos[]>("/cargas"));
@@ -43,11 +48,13 @@ export function Cargas() {
     e.preventDefault();
     setError(null);
     setMensaje(null);
-    if (!archivo) return setError("Debe seleccionar un archivo .csv");
+    if (!archivo) return setError("Debe seleccionar un archivo .csv o .xlsx");
+    if (esLlegadaProductos && !bodegaDestinoId) return setError("Debe seleccionar la bodega de destino");
     const formData = new FormData();
     formData.append("archivo", archivo);
     formData.append("entidad", entidad);
     formData.append("modo", modo);
+    if (esLlegadaProductos) formData.append("contexto", JSON.stringify({ bodegaDestinoId }));
     try {
       await api.postForm("/cargas", formData);
       setMensaje("Archivo recibido en el área de preparación. Valide y simule antes de aprobar.");
@@ -106,9 +113,18 @@ export function Cargas() {
             {MODOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
+        {esLlegadaProductos && (
+          <label>
+            <span className="etiqueta">Bodega de destino</span>
+            <select value={bodegaDestinoId} onChange={(e) => setBodegaDestinoId(e.target.value)}>
+              <option value="">Selecciona una bodega</option>
+              {bodegas.map((b) => <option key={b.id} value={b.id}>{b.codigo} — {b.nombre}</option>)}
+            </select>
+          </label>
+        )}
         <label>
-          <span className="etiqueta">Archivo CSV</span>
-          <input type="file" accept=".csv,.txt" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
+          <span className="etiqueta">Archivo (CSV o Excel)</span>
+          <input type="file" accept=".csv,.txt,.xlsx" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
         </label>
         <div style={{ alignSelf: "end" }}>
           <button className="btn" type="submit">Subir a preparación</button>

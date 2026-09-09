@@ -8,3 +8,6 @@ backend/prisma/dev.db
 frontend/node_modules/
 .DS_Store
 coverage/
+backend/storage/
+.pids/
+logs/

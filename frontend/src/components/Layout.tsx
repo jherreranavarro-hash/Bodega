@@ -3,13 +3,18 @@ import { useAuth } from "../auth/AuthContext";
 
 const ENLACES = [
   { ruta: "/", etiqueta: "Tablero" },
+  { ruta: "/alertas", etiqueta: "Centro de Decisiones" },
   { ruta: "/productos", etiqueta: "Productos" },
   { ruta: "/bodegas", etiqueta: "Bodegas y Ubicaciones" },
   { ruta: "/cargas", etiqueta: "Centro de Cargas" },
   { ruta: "/compras", etiqueta: "Compras y Recepción" },
   { ruta: "/salidas", etiqueta: "Solicitudes, Reservas y Despacho" },
   { ruta: "/transferencias", etiqueta: "Transferencias" },
+  { ruta: "/devoluciones", etiqueta: "Devoluciones" },
   { ruta: "/ajustes", etiqueta: "Conteos y Ajustes" },
+  { ruta: "/pronosticos", etiqueta: "Pronósticos y Escenarios" },
+  { ruta: "/precios", etiqueta: "Precios de Venta" },
+  { ruta: "/administracion", etiqueta: "Administración" },
 ];
 
 export function Layout() {

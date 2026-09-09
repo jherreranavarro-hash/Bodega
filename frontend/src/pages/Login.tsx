@@ -7,7 +7,7 @@ export function Login() {
   const { ingresar } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("admin@bodegademo.cl");
-  const [password, setPassword] = useState("Demo1234!");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
@@ -47,7 +47,8 @@ export function Login() {
           {cargando ? "Ingresando..." : "Ingresar"}
         </button>
         <p style={{ fontSize: "0.75rem", color: "var(--texto-suave)" }}>
-          Usuarios demo: admin@bodegademo.cl · jefe.bodega@bodegademo.cl · operador@bodegademo.cl (contraseña Demo1234!)
+          Cada usuario demo tiene su propia contraseña (ver README.md o el archivo de
+          credenciales entregado al equipo).
         </p>
       </form>
     </div>

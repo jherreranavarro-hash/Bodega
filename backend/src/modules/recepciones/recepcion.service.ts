@@ -12,7 +12,12 @@ export interface LineaRecepcion {
   cantidadRecibida: number | string;
   cantidadAceptada: number | string;
   cantidadRechazada?: number | string;
+  /** Costo unitario tal como fue facturado, en `moneda` (o en la moneda de la empresa si se omite). */
   costoUnitario: number | string;
+  /** Moneda de costoUnitario. Si se omite, se asume la moneda de la empresa. */
+  moneda?: string;
+  /** Tipo de cambio de `moneda` a la moneda de la empresa. Obligatorio si `moneda` difiere de la de la empresa. */
+  tipoCambio?: number | string;
   motivoRechazoId?: string;
 }
 
@@ -37,6 +42,8 @@ export async function contabilizarRecepcion(datos: DatosRecepcion) {
   if (datos.detalle.length === 0) throw new ErrorValidacion("La recepción no tiene líneas");
 
   return prisma.$transaction(async (tx) => {
+    const empresa = await tx.empresa.findUniqueOrThrow({ where: { id: datos.empresaId } });
+
     const operacion = await crearOperacion(tx, {
       empresaId: datos.empresaId,
       bodegaId: datos.bodegaId,
@@ -61,6 +68,19 @@ export async function contabilizarRecepcion(datos: DatosRecepcion) {
     for (const linea of datos.detalle) {
       const aceptada = new Prisma.Decimal(linea.cantidadAceptada);
       if (aceptada.lt(0)) throw new ErrorValidacion("La cantidad aceptada no puede ser negativa");
+
+      const monedaLinea = linea.moneda ?? empresa.moneda;
+      if (monedaLinea !== empresa.moneda && linea.tipoCambio == null) {
+        throw new ErrorValidacion(
+          `Falta el tipo de cambio de ${monedaLinea} a ${empresa.moneda} para valorizar esta línea (la empresa opera en ${empresa.moneda})`
+        );
+      }
+      const tipoCambio = linea.tipoCambio != null ? new Prisma.Decimal(linea.tipoCambio) : new Prisma.Decimal(1);
+      if (tipoCambio.lte(0)) throw new ErrorValidacion("El tipo de cambio debe ser positivo");
+      // Costo tal como fue facturado se conserva en recepcion_detalle; para valorizar
+      // el inventario (movimientos y capas de costo) siempre se usa la moneda base
+      // de la empresa, guardando moneda original y tipo de cambio para trazabilidad.
+      const costoUnitarioBase = new Prisma.Decimal(linea.costoUnitario).times(tipoCambio);
 
       let loteId: string | undefined;
       if (linea.loteCodigo) {
@@ -103,7 +123,7 @@ export async function contabilizarRecepcion(datos: DatosRecepcion) {
           ubicacionDestinoId: linea.ubicacionDestinoId,
           loteId,
           cantidad: aceptada,
-          costoUnitario: linea.costoUnitario,
+          costoUnitario: costoUnitarioBase,
           fechaEfectiva: datos.fechaEfectiva,
         });
 
@@ -111,7 +131,9 @@ export async function contabilizarRecepcion(datos: DatosRecepcion) {
           data: {
             productoId: linea.productoId,
             loteId,
-            costoUnitario: new Prisma.Decimal(linea.costoUnitario),
+            costoUnitario: costoUnitarioBase,
+            moneda: monedaLinea,
+            tipoCambio: linea.tipoCambio != null ? tipoCambio : null,
             cantidadOriginal: aceptada,
             cantidadDisponible: aceptada,
             fuenteTipo: "RECEPCION",

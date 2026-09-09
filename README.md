@@ -1,17 +1,20 @@
 # Bodega Demo — Sistema Integral de Bodega, Inventario y Toma de Decisiones
 
 Sistema modular de administración de bodegas e inventario: mantenedores, centro de
-cargas de datos, compras, recepción, reservas, despacho, transferencias, conteos/ajustes
-e indicadores de decisión, con persistencia real en PostgreSQL, control de acceso por
-rol/empresa/bodega, trazabilidad completa y pruebas automatizadas.
+cargas de datos (CSV y Excel), compras (con solicitud y aprobación propia), recepción
+(multimoneda), llegada de productos de Mercado Libre/liquidación con mantenedor de
+precios de venta, reservas, preparación, despacho, transferencias, devoluciones,
+conteos/ajustes, indicadores, bandeja de decisiones con alertas automáticas, y
+pronósticos/escenarios de simulación — con persistencia real en PostgreSQL, control de
+acceso por rol/empresa/bodega, períodos contables cerrados, reconciliación de saldos,
+trazabilidad completa y pruebas automatizadas.
 
-Este repositorio es una **implementación funcional de un núcleo end-to-end**, no una
-maqueta. Lee `docs/plan-implementacion.md` para ver qué está completo, qué es parcial
-y qué queda pendiente de forma explícita — la envergadura pedida (sección 1 del
-encargo) es la de un ERP de bodega completo; aquí se entregó el motor transaccional,
-el modelo de datos completo y un recorrido real de punta a punta, priorizado según
-la sección 17 del encargo ("primero arquitectura y modelo, luego una operación
-completa de principio a fin").
+Este repositorio es una **implementación funcional**, no una maqueta. Lee
+`docs/plan-implementacion.md` para ver qué está completo y qué queda pendiente de forma
+explícita (el asistente de IA en lenguaje natural de la sección 13 del encargo queda
+fuera de alcance). El desarrollo se priorizó según la sección 17 del encargo ("primero
+arquitectura y modelo, luego una operación completa de principio a fin"), ampliando
+luego módulo por módulo con pruebas reales en cada paso.
 
 ## Estructura del repositorio
 
@@ -27,7 +30,36 @@ plantillas/ Plantillas y archivos de ejemplo para el centro de cargas de datos
 - Node.js 20+
 - PostgreSQL 14+ (probado con 16)
 
-## Puesta en marcha (entorno de desarrollo/demo)
+## Puesta en marcha automática (recomendado)
+
+Un solo paso deja todo arriba: instala Node.js/PostgreSQL si faltan (usando `winget` en
+Windows), crea el rol y la base de datos si no existen, instala dependencias, aplica
+migraciones, siembra los datos de demostración, levanta backend y frontend, y abre el
+navegador en la aplicación.
+
+**Windows**: haz doble clic en `iniciar.bat` (o ejecútalo desde una consola). La primera
+vez te pedirá la contraseña del superusuario `postgres` para poder crear el rol/base de
+datos de la aplicación — si PostgreSQL ya estaba instalado y configurado con ese rol y
+esa base, puedes dejarlo en blanco (Enter) y continúa igual. Para detener todo:
+`detener.bat`.
+
+**macOS / Linux**:
+
+```bash
+./iniciar.sh
+```
+
+Para detener:
+
+```bash
+./detener.sh
+```
+
+En ambos casos, al terminar se muestra la URL (`http://localhost:5173`) y las
+credenciales de demostración. Es seguro volver a ejecutarlo (todos los pasos son
+idempotentes). Los logs quedan en `logs/backend.log` y `logs/frontend.log`.
+
+## Puesta en marcha manual (paso a paso, para entender o personalizar cada parte)
 
 ```bash
 # 1) Base de datos
@@ -50,18 +82,18 @@ npm run dev                # UI en http://localhost:5173 (proxy /api -> :4000)
 
 ### Usuarios de demostración
 
-Todos con contraseña `Demo1234!` (cámbiala antes de cualquier uso real):
+Cada usuario tiene su propia contraseña (cámbialas antes de cualquier uso real):
 
-| Correo | Rol |
-|---|---|
-| admin@bodegademo.cl | Administrador |
-| jefe.bodega@bodegademo.cl | Jefe de Bodega |
-| operador@bodegademo.cl | Operador de Bodega |
-| compras@bodegademo.cl | Compras |
-| solicitante@bodegademo.cl | Solicitante |
-| aprobador@bodegademo.cl | Aprobador |
-| auditor@bodegademo.cl | Auditor |
-| gerencia@bodegademo.cl | Gerencia |
+| Correo | Rol | Contraseña |
+|---|---|---|
+| admin@bodegademo.cl | Administrador | `ASgSrfXMMQ*3` |
+| jefe.bodega@bodegademo.cl | Jefe de Bodega | `TdsdEQRSbg@3` |
+| operador@bodegademo.cl | Operador de Bodega | `HTB9GHm7PU=6` |
+| compras@bodegademo.cl | Compras | `WzFucgkvri=7` |
+| solicitante@bodegademo.cl | Solicitante | `sAinLEi6d8+5` |
+| aprobador@bodegademo.cl | Aprobador | `znNvKKFXhF*4` |
+| auditor@bodegademo.cl | Auditor | `9Dbm4vXQem@3` |
+| gerencia@bodegademo.cl | Gerencia | `MNDm8tzvEr*3` |
 
 Estos datos de demostración están claramente separados del esquema productivo: viven
 en `prisma/seed.ts` y se identifican con el RUT `RUT-*`/`76.123.456-7` y códigos
@@ -72,10 +104,11 @@ en `prisma/seed.ts` y se identifican con el RUT `RUT-*`/`76.123.456-7` y código
 
 ```bash
 cd backend
-npm test        # 15 pruebas de aceptación contra PostgreSQL real (ver docs/pruebas.md)
+npm test         # 79 pruebas de aceptación contra PostgreSQL real (ver docs/pruebas.md)
+npm run reconciliar -- 76.123.456-7   # concilia saldos vs. movimientos (RUT de la empresa demo)
 
 cd frontend
-npm run smoke   # recorrido end-to-end real en navegador (requiere backend+frontend arriba)
+npm run smoke    # recorrido end-to-end real en navegador (requiere backend+frontend arriba)
 ```
 
 ## Documentación

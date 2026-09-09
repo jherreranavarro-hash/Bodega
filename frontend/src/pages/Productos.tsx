@@ -2,22 +2,51 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api, ErrorApi } from "../api/client";
 import type { Producto, UnidadMedida } from "../types";
 
+interface FiltrosLlegada {
+  grupo: string[];
+  condicion: string[];
+  status: string[];
+  subStatus: string[];
+  grade: string[];
+}
+
+const FILTROS_VACIOS: FiltrosLlegada = { grupo: [], condicion: [], status: [], subStatus: [], grade: [] };
+
 export function Productos() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [unidades, setUnidades] = useState<UnidadMedida[]>([]);
   const [busqueda, setBusqueda] = useState("");
+  const [opcionesFiltro, setOpcionesFiltro] = useState<FiltrosLlegada>(FILTROS_VACIOS);
+  const [filtroGrupo, setFiltroGrupo] = useState("");
+  const [filtroCondicion, setFiltroCondicion] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState("");
+  const [filtroSubStatus, setFiltroSubStatus] = useState("");
+  const [filtroGrade, setFiltroGrade] = useState("");
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function cargar() {
-    const params = busqueda ? `?q=${encodeURIComponent(busqueda)}` : "";
-    setProductos(await api.get<Producto[]>(`/productos${params}`));
+    const params = new URLSearchParams();
+    if (busqueda) params.set("q", busqueda);
+    if (filtroGrupo) params.set("grupo", filtroGrupo);
+    if (filtroCondicion) params.set("condicion", filtroCondicion);
+    if (filtroStatus) params.set("status", filtroStatus);
+    if (filtroSubStatus) params.set("subStatus", filtroSubStatus);
+    if (filtroGrade) params.set("grade", filtroGrade);
+    const query = params.toString();
+    setProductos(await api.get<Producto[]>(`/productos${query ? `?${query}` : ""}`));
   }
 
   useEffect(() => {
-    cargar();
     api.get<UnidadMedida[]>("/catalogos/unidades-medida").then(setUnidades);
+    api.get<FiltrosLlegada>("/productos/filtros/llegada").then(setOpcionesFiltro);
   }, []);
+
+  // Corre también en el montaje inicial (con los filtros vacíos) y cada vez que
+  // cambia alguno de los filtros de la llegada más reciente.
+  useEffect(() => {
+    cargar();
+  }, [filtroGrupo, filtroCondicion, filtroStatus, filtroSubStatus, filtroGrade]);
 
   async function onBuscar(e: FormEvent) {
     e.preventDefault();
@@ -46,15 +75,27 @@ export function Productos() {
         />
       )}
 
-      <form onSubmit={onBuscar} className="tarjeta" style={{ display: "flex", gap: 10 }}>
-        <input placeholder="Buscar por código, nombre o código de barras" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ flex: 1 }} />
+      <form onSubmit={onBuscar} className="tarjeta" style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <input placeholder="Buscar por código, nombre o código de barras" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
+        <SelectFiltro etiqueta="Grupo" valor={filtroGrupo} opciones={opcionesFiltro.grupo} onCambiar={(v) => { setFiltroGrupo(v); }} />
+        <SelectFiltro etiqueta="Condición" valor={filtroCondicion} opciones={opcionesFiltro.condicion} onCambiar={(v) => { setFiltroCondicion(v); }} />
+        <SelectFiltro etiqueta="Status" valor={filtroStatus} opciones={opcionesFiltro.status} onCambiar={(v) => { setFiltroStatus(v); }} />
+        <SelectFiltro etiqueta="Sub Status" valor={filtroSubStatus} opciones={opcionesFiltro.subStatus} onCambiar={(v) => { setFiltroSubStatus(v); }} />
+        <SelectFiltro etiqueta="Grade" valor={filtroGrade} opciones={opcionesFiltro.grade} onCambiar={(v) => { setFiltroGrade(v); }} />
         <button className="btn btn-secundario" type="submit">Buscar</button>
       </form>
+      <p style={{ margin: "-10px 0 0", fontSize: 13, color: "var(--texto-suave)" }}>
+        Los filtros de Grupo, Condición, Status, Sub Status y Grade se aplican sobre la última llegada
+        registrada de cada producto (carga "Llegada de productos").
+      </p>
 
-      <div className="tarjeta">
+      <div className="tarjeta" style={{ overflowX: "auto" }}>
         <table>
           <thead>
-            <tr><th>Código</th><th>Nombre</th><th>Unidad base</th><th>Lote</th><th>Serie</th><th>Vencimiento</th><th>Valorización</th><th>Estado</th></tr>
+            <tr>
+              <th>Código</th><th>Nombre</th><th>Unidad base</th><th>Lote</th><th>Serie</th><th>Vencimiento</th>
+              <th>Valorización</th><th>Grupo</th><th>Condición</th><th>Status</th><th>Sub Status</th><th>Grade</th><th>Estado</th>
+            </tr>
           </thead>
           <tbody>
             {productos.map((p) => (
@@ -66,14 +107,30 @@ export function Productos() {
                 <td>{p.controlSerie ? "Sí" : "No"}</td>
                 <td>{p.controlVencimiento ? "Sí" : "No"}</td>
                 <td>{p.metodoValorizacion}</td>
+                <td>{p.ultimaLlegada?.grupo ?? "—"}</td>
+                <td>{p.ultimaLlegada?.condicion ?? "—"}</td>
+                <td>{p.ultimaLlegada?.status ?? "—"}</td>
+                <td>{p.ultimaLlegada?.subStatus ?? "—"}</td>
+                <td>{p.ultimaLlegada?.grade ?? "—"}</td>
                 <td><span className={`badge ${p.activo ? "badge-ok" : "badge-pendiente"}`}>{p.activo ? "Activo" : "Inactivo"}</span></td>
               </tr>
             ))}
-            {productos.length === 0 && <tr><td colSpan={8} style={{ color: "var(--texto-suave)" }}>Sin resultados.</td></tr>}
+            {productos.length === 0 && <tr><td colSpan={13} style={{ color: "var(--texto-suave)" }}>Sin resultados.</td></tr>}
           </tbody>
         </table>
       </div>
     </div>
+  );
+}
+
+function SelectFiltro({ etiqueta, valor, opciones, onCambiar }: { etiqueta: string; valor: string; opciones: string[]; onCambiar: (v: string) => void }) {
+  return (
+    <select value={valor} onChange={(e) => onCambiar(e.target.value)} style={{ minWidth: 130 }}>
+      <option value="">{etiqueta} (todos)</option>
+      {opciones.map((o) => (
+        <option key={o} value={o}>{o}</option>
+      ))}
+    </select>
   );
 }
 

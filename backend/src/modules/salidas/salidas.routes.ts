@@ -6,6 +6,7 @@ import { requiereAutenticacion, requierePermiso } from "../../middleware/auth.mi
 import { crearReserva } from "../inventario/inventario.service.js";
 import { contabilizarDespacho } from "../despachos/despacho.service.js";
 import { registrarAuditoria } from "../../middleware/auditoria.middleware.js";
+import { registrarDemandaSolicitada } from "../analitica/demanda.service.js";
 
 export const salidasRouter = Router();
 salidasRouter.use(requiereAutenticacion);
@@ -43,6 +44,14 @@ salidasRouter.post("/solicitudes", requierePermiso("solicitudes_salida", "crear"
     },
     include: { detalle: true },
   });
+
+  const fechaDemanda = new Date();
+  await Promise.all(
+    solicitud.detalle.map((d) =>
+      registrarDemandaSolicitada(prisma, { productoId: d.productoId, bodegaId: solicitud.bodegaId, fecha: fechaDemanda, cantidad: d.cantidadSolicitada })
+    )
+  );
+
   res.status(201).json(solicitud);
 });
 

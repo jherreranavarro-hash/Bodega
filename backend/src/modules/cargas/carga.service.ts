@@ -159,7 +159,18 @@ export async function recibirArchivo(datos: DatosNuevaCarga) {
 
   const claveIdempotencia = calcularClaveIdempotencia(datos.empresaId, datos.entidad, datos.modo, datos.contenido, datos.contexto);
   const existente = await prisma.cargaDatos.findUnique({ where: { claveIdempotencia } });
-  if (existente) return existente;
+  if (existente) {
+    if (existente.estado !== EstadoCarga.RECHAZADA) return existente;
+    // Una carga RECHAZADA nunca llegó a tocar los datos operativos (su
+    // ejecución se revirtió completa, por ejemplo por un timeout de
+    // transacción en un archivo grande) — a diferencia de una ya ejecutada,
+    // no hay nada que proteger de duplicar. Se descarta y se vuelve a
+    // intentar en vez de dejar al usuario atascado para siempre bajo la
+    // misma clave de idempotencia sin ninguna acción posible en la UI.
+    await prisma.cargaError.deleteMany({ where: { cargaId: existente.id } });
+    await prisma.cargaFila.deleteMany({ where: { cargaId: existente.id } });
+    await prisma.cargaDatos.delete({ where: { id: existente.id } });
+  }
 
   const filas = await parsearFilas(datos.nombreArchivo, datos.contenido);
   if (filas.length === 0) throw new ErrorValidacion("El archivo no contiene filas");
@@ -281,21 +292,31 @@ export async function ejecutarCarga(cargaId: string, usuarioId: string) {
   const filas = await prisma.cargaFila.findMany({ where: { cargaId, procesada: false } });
 
   try {
-    await prisma.$transaction(async (tx) => {
-      for (const fila of filas) {
-        if (fila.accion === "RECHAZAR" || fila.accion === "SIN_CAMBIO") {
-          await tx.cargaFila.update({ where: { id: fila.id }, data: { procesada: true } });
-          continue;
+    // Una carga puede traer hasta MAXIMO_FILAS_POR_CARGA filas; con el timeout
+    // por defecto de Prisma (5 s) una carga grande real puede sobrepasarlo
+    // apenas, sobre todo en un disco más lento que el de desarrollo, y toda la
+    // transacción se revierte igual (queda en RECHAZADA) aunque cada fila
+    // individual fuera válida. Se sube el límite explícitamente en vez de
+    // partir la ejecución en varias transacciones, para no perder la garantía
+    // de "todo o nada" de una misma carga.
+    await prisma.$transaction(
+      async (tx) => {
+        for (const fila of filas) {
+          if (fila.accion === "RECHAZAR" || fila.accion === "SIN_CAMBIO") {
+            await tx.cargaFila.update({ where: { id: fila.id }, data: { procesada: true } });
+            continue;
+          }
+          const entidadId = await manejador.ejecutarFila(
+            tx,
+            fila.datosOriginales as Record<string, string>,
+            fila.datosPropuestos as Record<string, unknown> | undefined,
+            { empresaId: carga.empresaId, usuarioId, cargaId, contexto: carga.contexto as Record<string, unknown> | null }
+          );
+          await tx.cargaFila.update({ where: { id: fila.id }, data: { procesada: true, entidadResultanteId: entidadId } });
         }
-        const entidadId = await manejador.ejecutarFila(
-          tx,
-          fila.datosOriginales as Record<string, string>,
-          fila.datosPropuestos as Record<string, unknown> | undefined,
-          { empresaId: carga.empresaId, usuarioId, cargaId, contexto: carga.contexto as Record<string, unknown> | null }
-        );
-        await tx.cargaFila.update({ where: { id: fila.id }, data: { procesada: true, entidadResultanteId: entidadId } });
-      }
-    });
+      },
+      { timeout: 120_000, maxWait: 10_000 }
+    );
   } catch (err) {
     await prisma.cargaDatos.update({ where: { id: cargaId }, data: { estado: EstadoCarga.RECHAZADA } });
     throw err;

@@ -20,7 +20,7 @@ residuales de una corrida anterior):
 ✓ tests/solicitudes-compra.test.ts (5 tests)
 ✓ tests/pronosticos.test.ts (5 tests)
 ✓ tests/productos.test.ts (4 tests)
-✓ tests/cargas.test.ts (5 tests)
+✓ tests/cargas.test.ts (6 tests)
 ✓ tests/alertas.test.ts (6 tests)
 ✓ tests/reconciliacion.test.ts (3 tests)
 ✓ tests/preparaciones.test.ts (3 tests)
@@ -34,7 +34,7 @@ residuales de una corrida anterior):
 ✓ tests/adjuntos.test.ts (4 tests)
 
 Test Files  17 passed (17)
-     Tests  78 passed (78)
+     Tests  79 passed (79)
 ```
 
 ## Trazabilidad caso del encargo → prueba automatizada
@@ -108,6 +108,11 @@ Adicionalmente se prueba (más allá del mínimo pedido):
   moneda de la empresa sin exigir tipo de cambio.
 - **Límite de filas del centro de cargas** (`tests/cargas.test.ts`): un archivo con más
   filas que `MAXIMO_FILAS_POR_CARGA` se rechaza antes de crear la carga.
+- **Reintento tras una carga RECHAZADA** (`tests/cargas.test.ts`): subir el mismo archivo
+  después de que su ejecución se revirtió (`RECHAZADA`, p. ej. por un timeout de
+  transacción) crea una carga nueva desde cero — nunca devuelve la carga rota bajo la
+  misma clave de idempotencia — y el reintento completa el flujo (validar, aprobar,
+  ejecutar) normalmente.
 - **Adjuntos en disco** (`tests/adjuntos.test.ts`): guarda el archivo real y permite
   leerlo de vuelta con el mismo contenido; rechaza una extensión no permitida; rechaza
   un archivo que excede el tamaño máximo; eliminar el adjunto borra también el archivo

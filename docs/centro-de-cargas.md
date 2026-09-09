@@ -128,6 +128,28 @@ veces retorna la carga ya existente en lugar de crear una nueva y duplicar sus e
 (verificado en `tests/cargas.test.ts`); subir el mismo contenido con un `contexto`
 distinto (p. ej. otra bodega de destino) sí se trata como una carga nueva.
 
+**Excepción explícita: una carga en estado `RECHAZADA`.** `RECHAZADA` solo ocurre cuando
+`ejecutar` falla y su transacción se revierte completa (por ejemplo, un timeout en un
+archivo grande) — a diferencia de `EJECUTADA`, nunca llegó a tocar los datos operativos,
+así que no hay nada que la idempotencia deba proteger de duplicar. Devolverla tal cual
+dejaría al usuario atascado para siempre bajo la misma clave, sin ninguna acción posible
+en la UI (el botón "Ejecutar" solo aparece en estado `APROBADA`). Por eso, al recibir un
+archivo cuya clave de idempotencia coincide con una carga `RECHAZADA`, esa carga vieja se
+descarta (se borran sus filas y errores) y se crea una nueva desde cero — verificado en
+`tests/cargas.test.ts`.
+
+## Ejecución: una sola transacción con timeout ampliado
+
+`ejecutar` procesa todas las filas de la carga dentro de una única transacción de
+Prisma, para conservar la garantía de "todo o nada": si una fila falla a mitad de
+camino, ninguna de las anteriores queda aplicada. El timeout por defecto de Prisma para
+una transacción interactiva es 5 segundos, insuficiente para un archivo real de varios
+cientos de filas en un equipo con disco más lento que el de desarrollo (un archivo de
+619 filas ya tomó ~4,3 s en las pruebas de este mismo entorno) — se subió explícitamente
+a 120 s (`timeout`) con 10 s de espera para adquirir conexión (`maxWait`) en vez de subir
+el límite de filas por archivo (`MAXIMO_FILAS_POR_CARGA`, 5000) sin tener margen real
+para procesarlas.
+
 ## Seguridad del canal de carga
 
 - Límite de tamaño (10 MB) y filtro de extensión (`.csv`/`.txt`/`.xlsx`) en el

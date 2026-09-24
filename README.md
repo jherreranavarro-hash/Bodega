@@ -23,6 +23,7 @@ backend/    API REST (Node.js + TypeScript + Express + Prisma + PostgreSQL)
 frontend/   Aplicación web (React + TypeScript + Vite), interfaz en español
 docs/       Diseño funcional, modelo de datos, módulos, plan de implementación, pruebas
 plantillas/ Plantillas y archivos de ejemplo para el centro de cargas de datos
+m365-gobierno/ Aplicación independiente de gobierno de Microsoft 365 Business Premium (ver su README)
 ```
 
 ## Requisitos

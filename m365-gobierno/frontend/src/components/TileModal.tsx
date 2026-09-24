@@ -43,10 +43,10 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
       setPreview(r.results);
     });
 
-  const doDeploy = () =>
+  const doDeploy = (confirmText: string) =>
     act('deploy', async () => {
       setConfirm(false);
-      const r = await api<{ jobId: string }>('/deploy', { body: { items: [{ playbookId: pb.id, params }], confirm: true } });
+      const r = await api<{ jobId: string }>('/deploy', { body: { items: [{ playbookId: pb.id, params }], confirm: true, confirmText } });
       app.watchJob(r.jobId);
     });
 
@@ -204,7 +204,7 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
           ))}
         </div>
       )}
-      {confirm && <ConfirmDeploy count={1} onConfirm={doDeploy} onCancel={() => setConfirm(false)} />}
+      {confirm && <ConfirmDeploy playbookIds={[pb.id]} onConfirm={doDeploy} onCancel={() => setConfirm(false)} />}
     </article>
   );
 }

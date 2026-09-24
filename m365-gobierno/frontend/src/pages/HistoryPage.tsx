@@ -32,7 +32,8 @@ export function HistoryPage() {
           <button className="job-row-head" onClick={() => show(j.id)} aria-expanded={open?.id === j.id}>
             <span className={`dot d-${j.status}`} />
             <b>{new Date(j.createdAt).toLocaleString('es-CL')}</b>
-            <span className={`pill ${j.mode === 'real' ? 'warn' : 'neutral'}`}>{j.mode === 'real' ? 'Tenant real' : 'Simulación'}</span>
+            <span className={`tier t-${j.tier ?? (j.mode === 'real' ? 'prd' : 'sim')}`}>{j.envName ?? (j.mode === 'real' ? 'Tenant real' : 'Simulación')}</span>
+            {j.account && <span className="small">por {j.account}</span>}
             <span>{STATUS_LABEL[j.status]}</span>
             <span className="muted small">
               {j.items.length} playbooks: {j.items.slice(0, 3).map((i) => i.title).join(', ')}

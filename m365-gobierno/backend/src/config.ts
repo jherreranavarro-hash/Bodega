@@ -33,6 +33,9 @@ export const config = {
 
   forceSimulation: (env('MODO') ?? '').toLowerCase() === 'simulacion',
 
+  // URL con la que el navegador llega a la app; define el redirect URI del inicio de sesión con Microsoft
+  publicUrl: (env('PUBLIC_URL') ?? `http://localhost:${Number(env('PORT') ?? 4100)}`).replace(/\/+$/, ''),
+
   appPassword: env('APP_PASSWORD') ?? '',
   sessionSecret: env('SESSION_SECRET') ?? crypto.randomBytes(32).toString('hex'),
 };
@@ -45,8 +48,5 @@ export function powershellConfigured(): boolean {
   return Boolean(config.tenantId && config.clientId && config.certPfxPath);
 }
 
+/** Tipo de tenant sobre el que opera un contexto de ejecución. */
 export type Mode = 'simulacion' | 'real';
-
-export function currentMode(): Mode {
-  return !config.forceSimulation && graphConfigured() ? 'real' : 'simulacion';
-}

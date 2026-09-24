@@ -10,7 +10,7 @@ let token: string;
 beforeAll(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'gob-'));
   process.env.APP_PASSWORD = 'clave-de-prueba';
-  process.env.MODO = 'simulacion';
+  
   const { createApp } = await import('../src/app.js');
   app = createApp();
   token = (await request(app).post('/api/login').send({ password: 'clave-de-prueba' })).body.token;

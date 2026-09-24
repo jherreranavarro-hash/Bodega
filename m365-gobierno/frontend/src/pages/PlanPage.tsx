@@ -32,11 +32,11 @@ export function PlanPage({ goto }: { goto: (p: string) => void }) {
     }
   };
 
-  const doDeploy = async () => {
+  const doDeploy = async (confirmText: string) => {
     setConfirm(false);
     setError(null);
     try {
-      const r = await api<{ jobId: string }>('/deploy', { body: { items: state.plan, confirm: true } });
+      const r = await api<{ jobId: string }>('/deploy', { body: { items: state.plan, confirm: true, confirmText } });
       app.watchJob(r.jobId);
       setPreview(null);
     } catch (e: any) {
@@ -53,7 +53,9 @@ export function PlanPage({ goto }: { goto: (p: string) => void }) {
 
   return (
     <div className="page">
-      <h1>Plan de despliegue</h1>
+      <h1>
+        Plan de despliegue <span className={`tier t-${state.environment.tier}`}>{state.environment.name}</span>
+      </h1>
       <p className="muted">
         Arma el plan desde el mapa o cárgalo desde el Assessment. Primero previsualiza (lee el tenant y calcula qué cambiará), luego despliega:
         el motor aplica las políticas en orden, resolviendo dependencias.
@@ -96,7 +98,12 @@ export function PlanPage({ goto }: { goto: (p: string) => void }) {
                       <td>{pillarLabel(pb.pillar)}</td>
                       <td className="small">{ENGINE_LABEL[pb.engine]}</td>
                       <td>{rec ? <span className={`prio ${rec.priority}`}>{rec.priority}</span> : '—'}</td>
-                      <td className="small">{d ? (d.status === 'ok' ? '✓ desplegado' : d.status === 'manual' ? '⧗ manual' : '✖ error') : 'pendiente'}</td>
+                      <td className="small">
+                        {d ? (d.status === 'ok' ? '✓ desplegado' : d.status === 'manual' ? '⧗ manual' : '✖ error') : 'pendiente'}
+                        {state.environment.tier === 'prd' && (
+                          <div className="muted">{state.validatedInLower[pb.id] ? `validado en ${state.validatedInLower[pb.id].join(', ')}` : 'sin validar en DEV/POC'}</div>
+                        )}
+                      </td>
                       <td>
                         <button className="link small" onClick={() => app.removeFromPlan(pb.id)} aria-label={`Quitar ${pb.title}`}>
                           Quitar
@@ -135,7 +142,7 @@ export function PlanPage({ goto }: { goto: (p: string) => void }) {
           )}
         </>
       )}
-      {confirm && <ConfirmDeploy count={items.length} onConfirm={doDeploy} onCancel={() => setConfirm(false)} />}
+      {confirm && <ConfirmDeploy playbookIds={items.map((i) => i.pb.id)} onConfirm={doDeploy} onCancel={() => setConfirm(false)} />}
       <p className="muted small">Fases: {catalog.phases.map((p) => `${p.phase} ${p.name}`).join(' · ')}</p>
     </div>
   );

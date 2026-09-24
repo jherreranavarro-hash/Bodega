@@ -67,9 +67,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export class GraphClient implements GraphLike {
   private token?: { value: string; exp: number };
 
-  constructor(private fetchImpl: typeof fetch = fetch) {}
+  /**
+   * @param tokenProvider token delegado (sesión del administrador con MFA). Si se omite se usa
+   *   el registro de aplicación de backend/.env (client credentials).
+   */
+  constructor(
+    private tokenProvider?: () => Promise<string>,
+    private fetchImpl: typeof fetch = (...a) => fetch(...a),
+  ) {}
 
   async accessToken(): Promise<string> {
+    if (this.tokenProvider) return this.tokenProvider();
     if (this.token && this.token.exp - 120 > Date.now() / 1000) return this.token.value;
     const { tenantId, clientId, clientSecret, certPemPath } = config;
     if (!tenantId || !clientId) throw new Error('TENANT_ID y CLIENT_ID no están configurados');
@@ -99,10 +107,11 @@ export class GraphClient implements GraphLike {
     return this.token.value;
   }
 
-  /** Permisos de aplicación (roles) concedidos, leídos del token. */
+  /** Permisos concedidos, leídos del token: `roles` (aplicación) o `scp` (delegado). */
   async grantedRoles(): Promise<string[]> {
     const claims = decodeJwt(await this.accessToken());
-    return Array.isArray(claims.roles) ? claims.roles : [];
+    if (Array.isArray(claims.roles)) return claims.roles;
+    return String(claims.scp ?? '').split(' ').filter(Boolean);
   }
 
   private url(path: string, beta?: boolean) {

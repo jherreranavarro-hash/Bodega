@@ -1,13 +1,18 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import type { Mode } from '../config.js';
-import { load, save } from '../store.js';
+import { deploymentsOf, load, save } from '../store.js';
+import { modeOf, type EnvRef } from '../environments.js';
 import { graphFor, grantedRoles, psRunner, tenantInfo } from '../tenant.js';
 import { executePlan, type ItemResult, type ResolvedItem } from './runner.js';
 
 export interface Job {
   id: string;
-  mode: Mode;
+  mode: 'simulacion' | 'real';
+  envId: string;
+  envName: string;
+  tier: EnvRef['tier'];
+  /** Cuenta de administrador que autorizó el despliegue (sesión con MFA). */
+  account?: string;
   createdAt: string;
   finishedAt?: string;
   status: 'en-curso' | 'completado' | 'con-errores' | 'con-pendientes';
@@ -29,10 +34,15 @@ export function listJobs(): Job[] {
   return [...running.values(), ...(load().jobs as Job[])];
 }
 
-export function startJob(items: ResolvedItem[], mode: Mode): Job {
+export function startJob(items: ResolvedItem[], env: EnvRef, account?: string): Job {
+  const mode = modeOf(env);
   const job: Job = {
     id: crypto.randomUUID(),
     mode,
+    envId: env.id,
+    envName: env.name,
+    tier: env.tier,
+    account,
     createdAt: new Date().toISOString(),
     status: 'en-curso',
     items: items.map((i) => ({ playbookId: i.playbook.id, title: i.playbook.title })),
@@ -47,17 +57,17 @@ export function startJob(items: ResolvedItem[], mode: Mode): Job {
   };
   void (async () => {
     try {
-      log(`Despliegue iniciado en modo ${mode === 'real' ? 'REAL (tenant)' : 'simulación'}: ${items.length} playbooks`);
-      const tenant = await tenantInfo(mode);
+      log(`Despliegue iniciado en ${env.name}${account ? ` por ${account}` : ''}: ${items.length} playbooks`);
+      const tenant = await tenantInfo(env);
       const results = await executePlan(items, {
-        graph: graphFor(mode),
+        graph: graphFor(env),
         mode,
         dryRun: false,
         tenant,
-        grantedRoles: await grantedRoles(mode).catch(() => undefined),
-        manualDone: load().manualDone[mode],
+        grantedRoles: await grantedRoles(env).catch(() => undefined),
+        manualDone: load().manualDone[env.id] ?? {},
         log,
-        runPowerShell: psRunner(mode, tenant, log),
+        runPowerShell: psRunner(env, tenant, log),
         onResult: (r) => {
           job.results.push(r);
           jobEvents.emit(job.id, { type: 'result', result: r });
@@ -69,7 +79,7 @@ export function startJob(items: ResolvedItem[], mode: Mode): Job {
       save((s) => {
         for (const r of results) {
           if (r.status === 'omitido') continue;
-          s.deployments[mode][r.playbookId] = {
+          deploymentsOf(s, env.id)[r.playbookId] = {
             playbookId: r.playbookId,
             status: r.status === 'ok' ? 'ok' : r.status === 'manual' ? 'manual' : 'error',
             params: items.find((i) => i.playbook.id === r.playbookId)?.params ?? {},

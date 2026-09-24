@@ -8,6 +8,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { ConnectionPage } from './pages/ConnectionPage';
 import { TileModal } from './components/TileModal';
 import { JobMonitor } from './components/JobMonitor';
+import { EnvSwitcher } from './components/EnvSwitcher';
 
 const PAGES = [
   ['map', 'Mapa'],
@@ -55,15 +56,14 @@ function Login({ onLogin }: { onLogin: () => void }) {
 }
 
 function Shell({ onLogout }: { onLogout: () => void }) {
-  const { status, state } = useApp();
-  const initial = (window.location.hash.slice(1) as Page) || 'map';
+  const { state } = useApp();
+  const initial = (window.location.hash.slice(1).split('?')[0] as Page) || 'map';
   const [page, setPage] = useState<Page>(PAGES.some(([p]) => p === initial) ? initial : 'map');
   const goto = (p: string) => {
     setPage(p as Page);
     window.location.hash = p;
     window.scrollTo(0, 0);
   };
-  const real = status?.mode === 'real';
   return (
     <>
       <header className="topbar">
@@ -82,9 +82,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           ))}
         </nav>
         <div className="topbar-right">
-          <button className={`mode ${real ? 'real' : 'sim'}`} onClick={() => goto('connection')} title="Ver conexión">
-            {real ? `Tenant: ${status?.tenant?.defaultDomain ?? status?.tenantId}` : 'Modo simulación'}
-          </button>
+          <EnvSwitcher goto={goto} />
           <button className="link" onClick={onLogout}>
             Salir
           </button>

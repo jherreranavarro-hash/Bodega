@@ -49,3 +49,12 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
 export function jobEventsUrl(jobId: string) {
   return `/api/jobs/${jobId}/events?token=${encodeURIComponent(getToken() ?? '')}`;
 }
+
+/**
+ * Redirige a la página de inicio de sesión de Microsoft. La contraseña y el MFA del administrador
+ * se ingresan allí (nunca en esta aplicación); Microsoft vuelve a /api/auth/callback.
+ */
+export async function signInWithMicrosoft(envId: string) {
+  const { url } = await api<{ url: string }>(`/auth/login/${envId}`, { body: {} });
+  window.location.assign(url);
+}

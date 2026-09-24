@@ -89,6 +89,10 @@ export interface ItemResult {
 export interface Job {
   id: string;
   mode: 'simulacion' | 'real';
+  envId?: string;
+  envName?: string;
+  tier?: Tier;
+  account?: string;
   createdAt: string;
   finishedAt?: string;
   status: 'en-curso' | 'completado' | 'con-errores' | 'con-pendientes';
@@ -142,25 +146,51 @@ export interface Assessment {
   };
 }
 
+export type Tier = 'dev' | 'poc' | 'prd' | 'sim';
+
+export interface Environment {
+  id: string;
+  name: string;
+  kind: 'simulacion' | 'aplicacion' | 'delegado';
+  tier: Tier;
+  tenantId?: string;
+  clientId?: string;
+  orgDomain?: string;
+  adminUpn?: string;
+  connected: boolean;
+  session: {
+    account: string;
+    name?: string;
+    scopes: string[];
+    globalAdmin: boolean;
+    amr: string[];
+    signedInAt: string;
+    expiresAt: string;
+  } | null;
+}
+
 export interface AppState {
   mode: 'simulacion' | 'real';
+  environment: Environment;
   deployments: Record<string, DeploymentRecord>;
   manualDone: Record<string, string>;
   plan: PlanEntry[];
   assessment: Assessment | null;
+  /** playbookId → ambientes DEV/POC donde ya se desplegó correctamente. */
+  validatedInLower: Record<string, string[]>;
 }
 
 export interface Status {
   mode: 'simulacion' | 'real';
-  graphConfigured: boolean;
+  environment: Environment;
   powershellConfigured: boolean;
   pwshAvailable: boolean;
   forcedSimulation: boolean;
-  tenantId: string | null;
-  clientId: string | null;
   tenant?: { initialDomain?: string; defaultDomain?: string; country?: string };
   tenantError?: string;
 }
+
+export const TIER_LABEL: Record<Tier, string> = { dev: 'DEV', poc: 'POC', prd: 'PRD', sim: 'SIM' };
 
 export const PILLARS: { id: Pillar; label: string; color: string }[] = [
   { id: 'entra', label: 'Entra ID', color: '#1a73e8' },

@@ -1,15 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
-import { config, currentMode, graphConfigured, powershellConfigured } from './config.js';
+import { config, powershellConfigured } from './config.js';
 import { login, requireAuth } from './auth.js';
+import { completeLogin, logout, redirectUri, sessionInfo, startLogin, signedInAccount } from './auth/delegated.js';
 import { TILES, GROUP_LABELS } from './catalog/tiles.js';
 import { PLAYBOOKS, getPlaybook } from './playbooks/index.js';
 import { PROFILES, type Playbook, type Profile } from './engine/types.js';
 import { dependenciesOf, executePlan, missingPermissions, normalizeParams, resolvePlan, type PlanItemInput } from './engine/runner.js';
 import { getJob, jobEvents, listJobs, startJob } from './engine/jobs.js';
-import { load, save } from './store.js';
-import { graphFor, grantedRoles, psRunner, simulatedGraph, tenantInfo } from './tenant.js';
+import { deploymentsOf, load, manualDoneOf, save } from './store.js';
+import {
+  activeEnvironment,
+  createEnvironment,
+  deleteEnvironment,
+  getEnvironment,
+  listEnvironments,
+  modeOf,
+  setActiveEnvironment,
+  updateEnvironment,
+  type EnvRef,
+} from './environments.js';
+import { forgetTenant, graphFor, grantedRoles, psRunner, simulatedGraph, tenantInfo } from './tenant.js';
 import { buildScript, pwshAvailable } from './powershell/runner.js';
 import { scanTenant } from './assessment/scan.js';
 import { DEFAULT_QUESTIONNAIRE, PHASES, recommend, type Questionnaire } from './assessment/recommend.js';
@@ -32,6 +44,23 @@ function parseItems(body: any): PlanItemInput[] {
     .map((i: any) => ({ playbookId: i.playbookId, params: typeof i.params === 'object' && i.params ? i.params : {} }));
 }
 
+function envView(env: EnvRef) {
+  const session = env.kind === 'delegado' ? sessionInfo(env.id) : null;
+  return { ...env, session, connected: env.kind !== 'delegado' || Boolean(session) };
+}
+
+/** Playbooks desplegados correctamente en ambientes DEV/POC (validación previa a PRD). */
+function validatedInLower(): Record<string, string[]> {
+  const s = load();
+  const out: Record<string, string[]> = {};
+  for (const env of listEnvironments().filter((e) => e.tier === 'dev' || e.tier === 'poc')) {
+    for (const [id, d] of Object.entries(s.deployments[env.id] ?? {})) {
+      if (d.status === 'ok') (out[id] ??= []).push(env.name);
+    }
+  }
+  return out;
+}
+
 export function createApp() {
   const app = express();
   app.disable('x-powered-by');
@@ -39,6 +68,7 @@ export function createApp() {
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     next();
   });
 
@@ -50,27 +80,78 @@ export function createApp() {
     res.json({ token });
   });
 
+  // Regreso desde la página de Microsoft (navegación del navegador, sin cabecera de sesión).
+  // Lo protege el parámetro `state` de un solo uso generado en /api/auth/login.
+  app.get('/api/auth/callback', async (req, res) => {
+    try {
+      const { envId, info } = await completeLogin(req.query);
+      const env = getEnvironment(envId);
+      if (env) forgetTenant(env);
+      res.redirect(`/#connection?login=ok&account=${encodeURIComponent(info.account)}`);
+    } catch (e: any) {
+      res.redirect(`/#connection?login=error&msg=${encodeURIComponent(e?.message ?? 'Error de inicio de sesión')}`);
+    }
+  });
+
   app.use('/api', requireAuth);
+
+  // ---------- Ambientes (DEV / POC / PRD) ----------
+  app.get('/api/environments', (_req, res) => {
+    res.json({ active: activeEnvironment().id, redirectUri: redirectUri(), environments: listEnvironments().map(envView) });
+  });
+  app.post('/api/environments', (req, res) => res.status(201).json(envView(createEnvironment(req.body))));
+  app.put('/api/environments/:id', (req, res) => {
+    const before = getEnvironment(req.params.id);
+    if (!before || before.kind !== 'delegado') return res.status(404).json({ error: 'Ambiente no editable' });
+    const env = updateEnvironment(req.params.id, req.body);
+    // Si cambió el tenant, la app o la cuenta, la sesión anterior deja de ser válida
+    if (before.tenantId !== env.tenantId || before.clientId !== env.clientId || before.adminUpn !== env.adminUpn) logout(env.id);
+    forgetTenant(before);
+    res.json(envView(env));
+  });
+  app.delete('/api/environments/:id', (req, res) => {
+    const env = getEnvironment(req.params.id);
+    if (!env || env.kind !== 'delegado') return res.status(404).json({ error: 'Ambiente no eliminable' });
+    logout(env.id);
+    forgetTenant(env);
+    deleteEnvironment(env.id);
+    res.json({ ok: true });
+  });
+  app.post('/api/environments/:id/activate', (req, res) => {
+    if (listJobs().some((j) => j.status === 'en-curso')) return res.status(409).json({ error: 'Espera a que termine el despliegue en curso' });
+    res.json(envView(setActiveEnvironment(req.params.id)));
+  });
+
+  app.post('/api/auth/login/:envId', (req, res) => {
+    const env = getEnvironment(req.params.envId);
+    if (!env || env.kind !== 'delegado') return res.status(404).json({ error: 'Ambiente inexistente' });
+    res.json({ url: startLogin(env) });
+  });
+  app.post('/api/auth/logout/:envId', (req, res) => {
+    logout(req.params.envId);
+    res.json({ ok: true });
+  });
 
   app.get(
     '/api/status',
     wrap(async (_req, res) => {
-      const mode = currentMode();
+      const env = activeEnvironment();
       let tenant: unknown;
       let tenantError: string | undefined;
-      try {
-        tenant = await tenantInfo(mode);
-      } catch (e: any) {
-        tenantError = e?.message;
+      const view = envView(env);
+      if (view.connected) {
+        try {
+          tenant = await tenantInfo(env);
+        } catch (e: any) {
+          tenantError = e?.message;
+        }
       }
       res.json({
-        mode,
-        graphConfigured: graphConfigured(),
-        powershellConfigured: powershellConfigured(),
+        mode: modeOf(env),
+        environment: view,
+        powershellConfigured: env.kind === 'delegado' ? true : powershellConfigured(),
         pwshAvailable: await pwshAvailable(),
         forcedSimulation: config.forceSimulation,
-        tenantId: config.tenantId ?? null,
-        clientId: config.clientId ?? null,
         tenant,
         tenantError,
       });
@@ -80,15 +161,16 @@ export function createApp() {
   app.get(
     '/api/permissions',
     wrap(async (_req, res) => {
+      const env = activeEnvironment();
       const required = requiredPermissions();
       let granted: string[] | undefined;
       let error: string | undefined;
       try {
-        granted = await grantedRoles();
+        granted = await grantedRoles(env);
       } catch (e: any) {
         error = e?.message;
       }
-      res.json({ required, granted: granted ?? null, missing: granted ? missingPermissions(required, granted) : null, error });
+      res.json({ kind: env.kind, required, granted: granted ?? null, missing: granted ? missingPermissions(required, granted) : null, error });
     }),
   );
 
@@ -104,14 +186,16 @@ export function createApp() {
   });
 
   app.get('/api/state', (_req, res) => {
-    const mode = currentMode();
+    const env = activeEnvironment();
     const s = load();
     res.json({
-      mode,
-      deployments: s.deployments[mode],
-      manualDone: s.manualDone[mode],
+      mode: modeOf(env),
+      environment: envView(env),
+      deployments: s.deployments[env.id] ?? {},
+      manualDone: s.manualDone[env.id] ?? {},
       plan: s.plan,
-      assessment: s.assessment[mode] ?? null,
+      assessment: s.assessment[env.id] ?? null,
+      validatedInLower: validatedInLower(),
     });
   });
 
@@ -126,37 +210,47 @@ export function createApp() {
   app.post(
     '/api/plan/preview',
     wrap(async (req, res) => {
-      const mode = currentMode();
+      const env = activeEnvironment();
       const { items, errors } = resolvePlan(parseItems(req.body));
       if (errors.length) return res.status(400).json({ errors });
-      const tenant = await tenantInfo(mode);
+      const tenant = await tenantInfo(env);
       const results = await executePlan(items, {
-        graph: graphFor(mode),
-        mode,
+        graph: graphFor(env),
+        mode: modeOf(env),
         dryRun: true,
         tenant,
-        grantedRoles: await grantedRoles(mode).catch(() => undefined),
-        manualDone: load().manualDone[mode],
-        runPowerShell: psRunner(mode, tenant, () => {}),
+        grantedRoles: await grantedRoles(env).catch(() => undefined),
+        manualDone: load().manualDone[env.id] ?? {},
+        runPowerShell: psRunner(env, tenant, () => {}),
       });
-      res.json({ mode, results, order: items.map((i) => ({ playbookId: i.playbook.id, autoAdded: i.autoAdded, params: i.params })) });
+      res.json({ environment: env.name, results, order: items.map((i) => ({ playbookId: i.playbook.id, autoAdded: i.autoAdded, params: i.params })) });
     }),
   );
 
-  app.post('/api/deploy', (req, res) => {
-    const mode = currentMode();
-    if (mode === 'real' && req.body?.confirm !== true) {
-      return res.status(400).json({ error: 'Confirma explícitamente el despliegue en el tenant real' });
-    }
-    if (listJobs().some((j) => j.status === 'en-curso')) {
-      return res.status(409).json({ error: 'Ya hay un despliegue en curso' });
-    }
-    const { items, errors } = resolvePlan(parseItems(req.body));
-    if (errors.length) return res.status(400).json({ errors });
-    if (!items.length) return res.status(400).json({ error: 'El plan está vacío' });
-    const job = startJob(items, mode);
-    res.status(202).json({ jobId: job.id });
-  });
+  app.post(
+    '/api/deploy',
+    wrap(async (req, res) => {
+      const env = activeEnvironment();
+      if (env.kind !== 'simulacion' && req.body?.confirm !== true) {
+        return res.status(400).json({ error: `Confirma explícitamente el despliegue en ${env.name}` });
+      }
+      if (env.tier === 'prd' && String(req.body?.confirmText ?? '').trim() !== env.name) {
+        return res.status(400).json({ error: `Producción: escribe "${env.name}" para confirmar el despliegue` });
+      }
+      if (listJobs().some((j) => j.status === 'en-curso')) {
+        return res.status(409).json({ error: 'Ya hay un despliegue en curso' });
+      }
+      const { items, errors } = resolvePlan(parseItems(req.body));
+      if (errors.length) return res.status(400).json({ errors });
+      if (!items.length) return res.status(400).json({ error: 'El plan está vacío' });
+      if (env.kind === 'delegado') {
+        // Valida la sesión (y la renueva) antes de empezar, para no fallar a mitad de camino
+        await tenantInfo(env);
+      }
+      const job = startJob(items, env, env.kind === 'delegado' ? signedInAccount(env.id) : undefined);
+      res.status(202).json({ jobId: job.id });
+    }),
+  );
 
   app.get('/api/jobs', (_req, res) => {
     res.json(listJobs().map(({ log: _log, ...j }) => j));
@@ -190,17 +284,19 @@ export function createApp() {
   app.post('/api/manual/:id', (req, res) => {
     const pb = getPlaybook(req.params.id);
     if (!pb) return res.status(404).json({ error: 'No existe el playbook' });
-    const mode = currentMode();
+    const env = activeEnvironment();
     const done = req.body?.done === true;
     save((s) => {
+      const manual = manualDoneOf(s, env.id);
+      const deployments = deploymentsOf(s, env.id);
       if (done) {
-        s.manualDone[mode][pb.id] = new Date().toISOString();
+        manual[pb.id] = new Date().toISOString();
         if (pb.engine === 'manual') {
-          s.deployments[mode][pb.id] = { playbookId: pb.id, status: 'ok', params: {}, at: new Date().toISOString(), jobId: 'manual', summary: 'Pasos manuales completados' };
+          deployments[pb.id] = { playbookId: pb.id, status: 'ok', params: {}, at: new Date().toISOString(), jobId: 'manual', summary: 'Pasos manuales completados' };
         }
       } else {
-        delete s.manualDone[mode][pb.id];
-        if (pb.engine === 'manual') delete s.deployments[mode][pb.id];
+        delete manual[pb.id];
+        if (pb.engine === 'manual') delete deployments[pb.id];
       }
     });
     res.json({ ok: true });
@@ -211,23 +307,24 @@ export function createApp() {
     wrap(async (req, res) => {
       const pb = getPlaybook(req.params.id);
       if (!pb?.script || pb.engine === 'graph' || pb.engine === 'manual') return res.status(404).json({ error: 'Este playbook no usa PowerShell' });
-      const tenant = await tenantInfo();
+      const env = activeEnvironment();
+      const tenant = envView(env).connected ? await tenantInfo(env).catch(() => ({})) : {};
       const body = pb.script(normalizeParams(pb, req.body?.params ?? {}), tenant);
-      res.type('text/plain').send(buildScript(pb.engine, body, { interactive: true }));
+      res.type('text/plain').send(buildScript(pb.engine, body, 'interactive'));
     }),
   );
 
   app.post(
     '/api/assessment',
     wrap(async (req, res) => {
-      const mode = currentMode();
+      const env = activeEnvironment();
       const q: Questionnaire = { ...DEFAULT_QUESTIONNAIRE, ...(req.body?.questionnaire ?? {}) };
       const profile = PROFILES.includes(req.body?.profile) ? (req.body.profile as Profile) : undefined;
-      const scan = await scanTenant(graphFor(mode));
-      const recommendation = recommend(scan, q, load().deployments[mode], profile);
-      const result = { at: new Date().toISOString(), mode, questionnaire: q, scan, recommendation };
+      const scan = await scanTenant(graphFor(env));
+      const recommendation = recommend(scan, q, load().deployments[env.id] ?? {}, profile);
+      const result = { at: new Date().toISOString(), mode: modeOf(env), environment: env.name, questionnaire: q, scan, recommendation };
       save((s) => {
-        s.assessment[mode] = result;
+        s.assessment[env.id] = result;
       });
       res.json(result);
     }),
@@ -236,8 +333,8 @@ export function createApp() {
   app.post('/api/simulation/reset', (_req, res) => {
     simulatedGraph().reset();
     save((s) => {
-      s.deployments.simulacion = {};
-      s.manualDone.simulacion = {};
+      delete s.deployments.simulacion;
+      delete s.manualDone.simulacion;
       delete s.assessment.simulacion;
     });
     res.json({ ok: true });

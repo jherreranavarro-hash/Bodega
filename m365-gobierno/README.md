@@ -63,32 +63,65 @@ Requisitos: Node.js 20+. Para Exchange/Purview: PowerShell 7 (`pwsh`) en el serv
 ./iniciar.ps1           # Windows (PowerShell)
 ```
 
-Abre http://127.0.0.1:4100. Sin credenciales arranca en **modo simulación** contra un tenant
+Abre http://localhost:4100. Sin ambientes conectados trabaja en **modo simulación** contra un tenant
 de demostración (pyme chilena con Business Premium), ideal para capacitación y para validar
 el plan. Desarrollo: `npm run dev` en `backend/` y en `frontend/` (http://localhost:5180).
 
-## Conectar el tenant real
+## Ambientes DEV / POC / PRD e inicio de sesión del administrador
 
-1. Entra ID → Registros de aplicaciones → Nuevo registro (un solo inquilino).
-2. Permisos de **aplicación** de Microsoft Graph (+ consentimiento de administrador). La lista
-   exacta aparece en la página **Conexión** con ✓/✖ según lo concedido:
+La app trabaja con **ambientes**: cada uno es un tenant (DEV, POC, PRD) con su propio registro
+de aplicación. Se administran en la página **Conexión**, y el ambiente activo se elige en la
+barra superior (insignia azul DEV, morada POC, roja PRD).
+
+**Cómo se autentica el administrador:** al pulsar *Iniciar sesión con Microsoft (MFA)* se abre
+la página oficial `login.microsoftonline.com`. Allí el administrador escribe **su contraseña y
+aprueba el MFA**; Microsoft devuelve un código que la app canjea por un token (OAuth 2.0
+*authorization code* + PKCE, sin secreto). La aplicación:
+
+- **nunca ve ni guarda la contraseña** (pedirla en un formulario propio no es compatible con MFA
+  y Microsoft lo bloquea);
+- **rechaza la sesión si no se validó con MFA** (claim `amr`), si la cuenta es de otro tenant o
+  si no es la cuenta de administrador asignada al ambiente;
+- fuerza reingresar credenciales en cada inicio (`prompt=login`);
+- guarda los tokens **solo en memoria**: expiran tras 8 h sin uso o al reiniciar el servidor;
+- registra en el historial qué cuenta ejecutó cada despliegue.
+
+**Salvaguardas de producción (PRD):** el despliegue exige escribir el nombre del ambiente, y
+advierte (con confirmación adicional) de los playbooks que aún no se desplegaron con éxito en
+DEV o POC. Flujo recomendado: DEV → POC → PRD.
+
+### Registro de aplicación (una vez por tenant)
+
+1. Entra ID → Registros de aplicaciones → **Nuevo registro** (solo este directorio).
+2. Autenticación → Agregar plataforma → **Aplicaciones móviles y de escritorio** → URI de
+   redirección `http://localhost:4100/api/auth/callback` (o `<PUBLIC_URL>/api/auth/callback`;
+   la página Conexión muestra el valor exacto).
+3. Permisos de API → Microsoft Graph → **permisos delegados** (+ consentimiento de administrador):
    `Policy.Read.All, Policy.ReadWrite.ConditionalAccess, Policy.ReadWrite.AuthenticationMethod,
    Policy.ReadWrite.Authorization, Application.Read.All, Directory.ReadWrite.All,
    Group.ReadWrite.All, User.Read.All, AdministrativeUnit.ReadWrite.All,
    Organization.ReadWrite.All, DeviceManagementConfiguration.ReadWrite.All,
    DeviceManagementServiceConfig.ReadWrite.All, DeviceManagementApps.ReadWrite.All,
-   SharePointTenantSettings.ReadWrite.All` y, para el Assessment,
+   SharePointTenantSettings.ReadWrite.All, offline_access` y, para el Assessment,
    `AuditLog.Read.All, UserAuthenticationMethod.Read.All, RoleManagement.Read.Directory,
    DeviceManagementManagedDevices.Read.All, SecurityEvents.Read.All, Reports.Read.All`.
-3. Exchange/Purview: permiso `Office 365 Exchange Online → Exchange.ManageAsApp` y roles
-   **Administrador de Exchange** y **Administrador de cumplimiento** asignados a la app.
-4. Sube un certificado a la app. Completa `backend/.env` (ver `.env.example`):
-   `TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET` o `CERT_PEM_PATH`, y `CERT_PFX_PATH` +
-   `CERT_PFX_PASSWORD` para PowerShell. Reinicia: la barra superior mostrará el tenant.
+   Para Exchange/Purview: Office 365 Exchange Online → delegado `Exchange.Manage`.
+4. En la app: Conexión → *Agregar ambiente* → nombre, tipo, **Tenant ID**, **Client ID**,
+   cuenta de administrador y (opcional) dominio inicial → *Iniciar sesión con Microsoft (MFA)*.
 
-Si `pwsh` o el certificado no están disponibles, los playbooks de Exchange/Purview quedan como
-"pasos manuales" y ofrecen **Descargar script .ps1** (idempotente, con inicio de sesión
-interactivo) para que un administrador lo ejecute.
+La cuenta necesita roles suficientes (Administrador global, o Seguridad + Intune + Exchange +
+Cumplimiento). Con sesión delegada, los scripts de Exchange/Purview se ejecutan con el token del
+administrador (`Connect-ExchangeOnline -AccessToken`, requiere `pwsh` y el módulo
+ExchangeOnlineManagement 3.x en el servidor); si no están disponibles o la versión del módulo no
+admite token para Purview, se ofrece **Descargar script .ps1** para ejecutarlo con inicio de
+sesión interactivo.
+
+### Opcional: ambiente desatendido
+
+Para automatización sin persona se puede seguir usando un registro con permisos de
+**aplicación** y certificado en `backend/.env` (`TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET` o
+`CERT_PEM_PATH`, `CERT_PFX_PATH`). Aparece como ambiente "Aplicación (.env)" y se trata como
+producción.
 
 ## Pruebas
 
@@ -96,7 +129,7 @@ interactivo) para que un administrador lo ejecute.
 cd backend && npm test
 ```
 
-Cubren la integridad del catálogo (cajas, dependencias, ciclos), despliegue completo en el
+Cubren el inicio de sesión del administrador (PKCE, rechazo sin MFA, otro tenant o cuenta distinta, renovación de tokens), las salvaguardas de PRD, la integridad del catálogo (cajas, dependencias, ciclos), despliegue completo en el
 tenant simulado + idempotencia (segunda ejecución sin cambios), que la previsualización no
 escribe, la salvaguarda de *security defaults*, el Assessment y la API.
 

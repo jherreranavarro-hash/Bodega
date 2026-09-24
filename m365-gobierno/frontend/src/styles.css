@@ -157,7 +157,7 @@ main { padding: 20px 16px 120px; max-width: 1480px; margin: 0 auto; }
 .lg.star { color: #f5b301; font-size: 14px; }
 
 .map-scroll { overflow-x: auto; padding-bottom: 8px; }
-.map { min-width: 1180px; }
+.map { min-width: 1300px; }
 .hdr-row { display: grid; grid-template-columns: 5fr 5fr 3fr 2fr; gap: 16px; padding: 0 44px; }
 .hdr { color: #fff; font-weight: 700; font-size: .85rem; text-align: center; padding: 7px; border-radius: 4px; }
 .h-o365 { background: var(--o365); }
@@ -192,7 +192,7 @@ main { padding: 20px 16px 120px; max-width: 1480px; margin: 0 auto; }
 .tile {
   position: relative; min-height: 50px; padding: 5px 4px; border: 0; border-radius: 5px;
   color: #fff; font: inherit; font-size: .68rem; font-weight: 700; line-height: 1.15; cursor: pointer;
-  overflow-wrap: anywhere; hyphens: auto;
+  overflow-wrap: break-word; hyphens: manual;
   display: flex; align-items: center; justify-content: center; text-align: center;
   box-shadow: 0 1px 2px rgb(0 0 0 / 25%);
   transition: transform .12s ease, box-shadow .12s ease, opacity .2s;
@@ -391,3 +391,28 @@ input[type='text'], input[type='number'], input[type='password'], input:not([typ
   .two { grid-template-columns: 1fr; }
   .plan-table th:nth-child(3), .plan-table td:nth-child(3) { display: none; }
 }
+
+/* ---------- Ambientes ---------- */
+.tier { display: inline-block; font-size: .7rem; font-weight: 800; padding: 2px 7px; border-radius: 4px; color: #fff; letter-spacing: .04em; vertical-align: middle; }
+.t-sim { background: #b45309; }
+.t-dev { background: #2563eb; }
+.t-poc { background: #7c3aed; }
+.t-prd { background: #dc2626; }
+.env-switcher { display: flex; align-items: center; gap: 8px; }
+.env-switcher select { width: auto; max-width: 260px; padding: 4px 8px; font-size: .85rem; }
+.small-btn { padding: 4px 10px; font-size: .8rem; }
+.conn-dot { width: 9px; height: 9px; border-radius: 50%; background: #16a34a; box-shadow: 0 0 0 3px color-mix(in srgb, #16a34a 25%, transparent); }
+.env-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.env-list .card { margin: 0; }
+.env-card.active { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent); }
+.env-head { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.env-dl { display: grid; grid-template-columns: 96px 1fr; gap: 3px 8px; margin: 8px 0; }
+.env-dl dt { color: var(--muted); }
+.env-dl dd { margin: 0; word-break: break-all; }
+.env-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
+.env-add { border-style: dashed; font: inherit; font-weight: 600; color: var(--primary); cursor: pointer; min-height: 120px; }
+.env-form .env-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 10px 0; }
+.env-form label, .confirm-type { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 600; }
+.confirm-type { margin-top: 12px; }
+.ok-card { border-color: #16a34a; background: color-mix(in srgb, #16a34a 8%, var(--surface)); }
+.small-modal .card { box-shadow: none; }

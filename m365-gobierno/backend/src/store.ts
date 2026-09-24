@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { config, type Mode } from './config.js';
+import { config } from './config.js';
 import type { Params } from './engine/types.js';
 
 export interface DeploymentRecord {
@@ -17,21 +17,34 @@ export interface PlanEntry {
   params?: Params;
 }
 
+/** Todo lo que depende del tenant se guarda por id de ambiente (simulacion, DEV, POC, PRD…). */
 interface State {
-  deployments: Record<Mode, Record<string, DeploymentRecord>>;
-  manualDone: Record<Mode, Record<string, string>>;
+  deployments: Record<string, Record<string, DeploymentRecord>>;
+  manualDone: Record<string, Record<string, string>>;
   plan: PlanEntry[];
-  assessment: Partial<Record<Mode, unknown>>;
+  assessment: Record<string, unknown>;
   jobs: unknown[];
+  environments: unknown[];
+  activeEnv: string;
 }
 
 const empty = (): State => ({
-  deployments: { simulacion: {}, real: {} },
-  manualDone: { simulacion: {}, real: {} },
+  deployments: {},
+  manualDone: {},
   plan: [],
   assessment: {},
   jobs: [],
+  environments: [],
+  activeEnv: '',
 });
+
+export function deploymentsOf(s: State, envId: string): Record<string, DeploymentRecord> {
+  return (s.deployments[envId] ??= {});
+}
+
+export function manualDoneOf(s: State, envId: string): Record<string, string> {
+  return (s.manualDone[envId] ??= {});
+}
 
 const file = () => path.join(config.dataDir, 'state.json');
 let cache: State | undefined;

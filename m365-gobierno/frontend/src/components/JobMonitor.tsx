@@ -6,7 +6,7 @@ import { ResultCard } from './StepList';
 
 /** Panel flotante que sigue un despliegue en vivo (Server-Sent Events). */
 export function JobMonitor() {
-  const { activeJob, watchJob, refresh } = useApp();
+  const { activeJob, watchJob, refresh, state } = useApp();
   const [log, setLog] = useState<string[]>([]);
   const [results, setResults] = useState<ItemResult[]>([]);
   const [status, setStatus] = useState<Job['status']>('en-curso');
@@ -44,7 +44,9 @@ export function JobMonitor() {
     <aside className={`job-monitor${expanded ? '' : ' collapsed'}`} aria-live="polite">
       <header>
         <span className={`dot d-${status}`} />
-        <strong>Despliegue {status === 'en-curso' ? 'en curso…' : status.replace('-', ' ')}</strong>
+        <strong>
+          Despliegue {status === 'en-curso' ? 'en curso…' : status.replace('-', ' ')} · {state.environment.name}
+        </strong>
         <span className="muted small">
           {ok}/{results.length} OK
         </span>

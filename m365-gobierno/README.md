@@ -95,8 +95,11 @@ DEV o POC. Flujo recomendado: DEV → POC → PRD.
 Antes de registrar la app, verifica que la cuenta tenga lo necesario (roles, MFA, licencia
 Business Premium, lectura de Acceso Condicional e Intune):
 
-```bash
-cd backend && npm run revisar-accesos -- contoso.onmicrosoft.com
+```powershell
+# Windows, sin instalar nada:
+powershell -ExecutionPolicy Bypass -File .\revisar-accesos.ps1 -Tenant contoso.onmicrosoft.com
+# o con Node.js:
+cd backend; npm run revisar-accesos -- contoso.onmicrosoft.com
 ```
 
 Muestra un código para ingresar en https://microsoft.com/devicelogin: la contraseña y el MFA se

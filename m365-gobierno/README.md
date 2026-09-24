@@ -90,6 +90,18 @@ aprueba el MFA**; Microsoft devuelve un código que la app canjea por un token (
 advierte (con confirmación adicional) de los playbooks que aún no se desplegaron con éxito en
 DEV o POC. Flujo recomendado: DEV → POC → PRD.
 
+### Revisión previa de accesos (solo lectura)
+
+Antes de registrar la app, verifica que la cuenta tenga lo necesario (roles, MFA, licencia
+Business Premium, lectura de Acceso Condicional e Intune):
+
+```bash
+cd backend && npm run revisar-accesos -- contoso.onmicrosoft.com
+```
+
+Muestra un código para ingresar en https://microsoft.com/devicelogin: la contraseña y el MFA se
+ingresan en tu navegador. Solo pide permisos de lectura y no modifica nada.
+
 ### Registro de aplicación (una vez por tenant)
 
 1. Entra ID → Registros de aplicaciones → **Nuevo registro** (solo este directorio).

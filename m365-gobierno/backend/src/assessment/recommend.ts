@@ -129,7 +129,7 @@ export function recommend(
     if (scan.globalAdmins < 2) f('few-admins', 'media', 'entra', 'Menos de 2 administradores globales', 'Riesgo de quedar sin acceso. Crea cuentas de emergencia.', ['entra-emergency-access']);
   }
   if (scan.mfa && scan.mfa.pct < 90) {
-    f('mfa-registration', scan.mfa.pct < 60 ? 'alta' : 'media', 'entra', `Solo ${scan.mfa.pct}% de los usuarios tiene MFA registrado`, `${scan.mfa.total - scan.mfa.registered} usuarios sin método MFA.`, ['entra-authenticator', 'entra-registration-campaign', 'entra-tap']);
+    f('mfa-registration', scan.mfa.pct < 60 ? 'alta' : 'media', 'entra', `Solo ${scan.mfa.pct}% de los usuarios miembros tiene MFA registrado`, `${scan.mfa.total - scan.mfa.registered} usuarios sin método MFA y ${scan.mfa.weakOnly} solo con SMS/teléfono.`, ['entra-authenticator', 'entra-registration-campaign', 'entra-tap']);
   }
   if (scan.authorization?.legacyConsent) {
     f('user-consent', 'alta', 'entra', 'Usuarios pueden dar consentimiento a cualquier aplicación', 'Riesgo de "consent phishing": apps maliciosas con acceso al correo y archivos.', ['entra-authorization-hardening']);
@@ -145,6 +145,8 @@ export function recommend(
       f('no-devices', 'alta', 'intune', 'Ningún dispositivo administrado por Intune', 'Los equipos acceden a datos de la empresa sin control. Habilita la inscripción automática.', ['entra-device-join', 'intune-compliance', 'intune-autopilot']);
     } else {
       const unencrypted = scan.devices.total - scan.devices.encrypted;
+      const coverage = scan.users?.members ? scan.devices.total / scan.users.members : 1;
+      if (coverage < 0.8) f('device-coverage', coverage < 0.5 ? 'alta' : 'media', 'intune', `Solo ≈${Math.round(coverage * 100)}% de los usuarios tiene su equipo administrado`, `${scan.devices.total} dispositivos en Intune para ${scan.users?.members} usuarios: el resto accede sin control de cumplimiento ni cifrado.`, ['entra-device-join', 'intune-autopilot', 'intune-compliance']);
       if (unencrypted > 0) f('unencrypted', 'alta', 'intune', `${unencrypted} dispositivos sin cifrar`, 'Un equipo perdido expone toda su información.', ['intune-bitlocker', 'intune-compliance']);
       if (scan.devices.noncompliant > 0) f('noncompliant', 'media', 'intune', `${scan.devices.noncompliant} dispositivos no conformes`, 'Revisa el motivo en Intune antes de exigir cumplimiento en Acceso Condicional.', ['intune-compliance']);
     }

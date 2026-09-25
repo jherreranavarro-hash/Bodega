@@ -42,9 +42,10 @@ describe('madurez basada en el estado real del tenant', () => {
     const scan = await scanTenant(new SimulatedGraph(undefined, demoTenant), { probe: async () => simulatedProbe() });
     const rec = recommend(scan, DEFAULT_QUESTIONNAIRE, {});
     const dlp = rec.scores.checks.find((c) => c.id === 'dlp')!;
-    expect(dlp.value).toBe(1);
+    // Aplicada en Exchange, SharePoint y OneDrive; Teams sin DLP → 3 de 4 cargas
+    expect(dlp.value).toBe(0.75);
     expect(dlp.source).toBe('Tenant · Purview PowerShell');
-    expect(dlp.detail).toContain('Datos financieros Chile (aplicada)');
+    expect(dlp.detail).toContain('Teams sin DLP');
     expect(rec.scores.checks.find((c) => c.id === 'safe-links')!.value).toBe(0.5);
     expect(rec.scores.checks.find((c) => c.id === 'audit')!.value).toBe(1);
     expect(rec.scores.pillars.purview).toBeGreaterThan(0);
@@ -93,5 +94,34 @@ describe('lecturas robustas', () => {
     const scan = await scanTenant(graph, { probe: async () => probe });
     expect(scan.errors.map((e) => e.area)).not.toContain('Etiquetas de confidencialidad (Graph)');
     expect(scan.errors.map((e) => e.area)).not.toContain('Etiquetas de retención (Graph)');
+  });
+});
+
+describe('madurez por cobertura real de usuarios y dispositivos', () => {
+  it('MFA cuenta solo a quien lo tiene registrado y se le exige', async () => {
+    const scan = await scanTenant(new SimulatedGraph(undefined, demoTenant));
+    const rec = recommend(scan, DEFAULT_QUESTIONNAIRE, {});
+    const mfa = rec.scores.checks.find((c) => c.id === 'mfa-protected')!;
+    // 42 miembros: 9 robusto, 17 solo teléfono (50%) → 17.5/42; security defaults = 70%
+    expect(mfa.value).toBeCloseTo(((9 + 0.5 * 17) / 42) * 0.7, 5);
+    expect(rec.scores.checks.find((c) => c.id === 'mfa-strong')!.value).toBeCloseTo(9 / 42, 5);
+  });
+
+  it('pocos dispositivos administrados no cuentan como 100%', async () => {
+    const scan = await scanTenant(new SimulatedGraph(undefined, demoTenant));
+    const rec = recommend(scan, DEFAULT_QUESTIONNAIRE, {});
+    const enrolled = rec.scores.checks.find((c) => c.id === 'enrolled')!;
+    expect(enrolled.value).toBeCloseTo(31 / 42, 5);
+    const compliant = rec.scores.checks.find((c) => c.id === 'compliant')!;
+    expect(compliant.value).toBeCloseTo(scan.devices!.compliant / 31, 5);
+  });
+
+  it('reglas de correo limitadas a algunos usuarios valen 50%', async () => {
+    const { simulatedProbe } = await import('../src/assessment/probe.js');
+    const probe = simulatedProbe();
+    probe.exo!.safeLinksRules = [{ Name: 'Piloto', State: 'Enabled', Scope: 'usuarios' }];
+    const scan = await scanTenant(new SimulatedGraph(undefined, demoTenant), { probe: async () => probe });
+    const rec = recommend(scan, DEFAULT_QUESTIONNAIRE, {});
+    expect(rec.scores.checks.find((c) => c.id === 'safe-links')!.value).toBe(0.5);
   });
 });

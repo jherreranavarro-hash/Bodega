@@ -75,9 +75,22 @@ export function MetricsPage() {
             base con el estado actual.
           </p>
         </div>
-        <button className="btn primary" onClick={measure} disabled={busy}>
-          {busy ? 'Midiendo…' : 'Tomar medición ahora'}
-        </button>
+        <div className="doc-actions">
+          <button
+            className="btn ghost"
+            disabled={busy}
+            onClick={async () => {
+              if (!confirm('¿Borrar el historial de mediciones de este ambiente y tomar una nueva línea base ahora?')) return;
+              await api('/metrics/reset', { body: {} });
+              await measure();
+            }}
+          >
+            Nueva línea base
+          </button>
+          <button className="btn primary" onClick={measure} disabled={busy}>
+            {busy ? 'Midiendo…' : 'Tomar medición ahora'}
+          </button>
+        </div>
       </div>
       {error && <div className="card warn-card">{error}</div>}
 

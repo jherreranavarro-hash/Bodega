@@ -30,6 +30,108 @@ const NE = (detail = 'No se pudo leer en el tenant'): CheckResult => ({ value: n
 const enabledRules = (rules?: { Name: string; State: string }[]) => (rules ?? []).filter((r) => r.State === 'Enabled');
 const list = (names: string[], max = 4) => (names.length > max ? `${names.slice(0, max).join(', ')} y ${names.length - max} más` : names.join(', '));
 
+
+const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
+
+/** MFA efectivo = (robusto 100% + solo SMS/teléfono 50%) × proporción a la que se le exige. */
+function mfaProtected(scan: ScanResult): CheckResult {
+  const m = scan.mfa;
+  if (!m?.total) return NE();
+  const registeredFactor = (m.strong + 0.5 * m.weakOnly) / m.total;
+  let enforcement = 0;
+  let how = 'ninguna política lo exige';
+  if (scan.ca?.requireMfaAll) {
+    const excluded = scan.ca.mfaAllExcluded ?? 0;
+    enforcement = Math.max(0, 1 - excluded / m.total);
+    how = `Acceso Condicional lo exige a todos${excluded ? ` salvo ${excluded} excluidos` : ''}`;
+  } else if (scan.securityDefaults) {
+    enforcement = 0.7;
+    how = 'solo valores predeterminados de seguridad (piden MFA en situaciones de riesgo y dan 14 días para registrarse: se cuenta 70%)';
+  } else if (scan.ca === undefined && scan.securityDefaults === undefined) {
+    return NE();
+  }
+  const value = registeredFactor * enforcement;
+  return {
+    value,
+    detail: `${m.registered} de ${m.total} usuarios miembros registrados (${m.strong} robusto, ${m.weakOnly} solo SMS/teléfono = 50%); ${how}. Protección efectiva ≈ ${Math.round(value * 100)}% de los usuarios`,
+    source: 'Tenant · Graph',
+  };
+}
+
+const OS = (o: string): string | null => (/windows/i.test(o) ? 'Windows' : /ios|ipad/i.test(o) ? 'iOS' : /android/i.test(o) ? 'Android' : /mac/i.test(o) ? 'macOS' : null);
+
+function compliancePlatforms(scan: ScanResult): CheckResult {
+  const inUse = [...new Set(Object.keys(scan.devices?.byOs ?? {}).map(OS).filter((x): x is string => Boolean(x)))];
+  const covered = scan.intune?.compliancePlatforms ?? [];
+  if (!inUse.length) return { value: covered.length ? 1 : 0, detail: covered.length ? `Políticas para: ${covered.join(', ')}` : 'Sin políticas de cumplimiento', source: 'Tenant · Graph' };
+  const ok = inUse.filter((p) => covered.includes(p));
+  const missing = inUse.filter((p) => !covered.includes(p));
+  return {
+    value: ok.length / inUse.length,
+    detail: `${scan.intune?.compliancePolicies ?? 0} políticas; cubren ${ok.join(', ') || 'ninguna'} de las plataformas en uso (${inUse.join(', ')})${missing.length ? `; sin política: ${missing.join(', ')}` : ''}`,
+    source: 'Tenant · Graph',
+  };
+}
+
+/** Reglas activas: toda la organización = 100%; solo usuarios/grupos específicos = 50%. */
+function ruleCoverage(rules: { Name: string; Scope?: string }[]): { value: number; detail: string } | null {
+  if (!rules.length) return null;
+  const org = rules.filter((r) => r.Scope !== 'usuarios');
+  if (org.length) return { value: 1, detail: `Activo para toda la organización: ${list(org.map((r) => r.Name))}` };
+  return { value: 0.5, detail: `Activo solo para usuarios o grupos específicos: ${list(rules.map((r) => r.Name))}` };
+}
+
+const WORKLOADS: [string, RegExp][] = [
+  ['Exchange', /exchange/i],
+  ['SharePoint', /sharepoint/i],
+  ['OneDrive', /onedrive/i],
+  ['Teams', /teams|skype/i],
+];
+
+/** DLP por carga de trabajo: aplicada = 100%, en simulación = 50%, sin directiva = 0%. */
+function dlpCoverage(policies: { Name: string; Mode: string; Enabled?: boolean; Workload?: string }[]): CheckResult {
+  const active = policies.filter((p) => p.Enabled !== false && p.Mode !== 'Disable');
+  const parts = WORKLOADS.map(([name, re]) => {
+    const on = active.filter((p) => p.Mode === 'Enable' && re.test(p.Workload ?? ''));
+    const test = active.filter((p) => /^Test/i.test(p.Mode) && re.test(p.Workload ?? ''));
+    return { name, score: on.length ? 1 : test.length ? 0.5 : 0, state: on.length ? 'aplicada' : test.length ? 'simulación' : 'sin DLP' };
+  });
+  const value = parts.reduce((a, x) => a + x.score, 0) / WORKLOADS.length;
+  return {
+    value,
+    detail: `${policies.length} directivas (${list(policies.map((p) => `${p.Name}: ${p.Mode}`))}). Cobertura: ${parts.map((x) => `${x.name} ${x.state}`).join(' · ')}`,
+    source: 'Tenant · Purview PowerShell',
+  };
+}
+
+function labelCoverage(ipps: NonNullable<ScanResult['probe']>['ipps'] & object): CheckResult {
+  const labels = ipps.labels ?? [];
+  const policies = (ipps.labelPolicies ?? []).filter((p) => p.Enabled !== false);
+  if (!labels.length) return { value: 0, detail: 'Sin etiquetas de confidencialidad', source: 'Tenant · Purview PowerShell' };
+  const toAll = policies.some((p) => /(^|,)\s*All\s*(,|$)/i.test(p.Exchange ?? ''));
+  const value = !policies.length ? 0.25 : toAll ? 1 : 0.5;
+  return {
+    value,
+    detail: `${labels.length} etiquetas (${list(labels.map((l) => l.DisplayName ?? l.Name))}); ${
+      !policies.length ? 'no están publicadas (25%)' : toAll ? 'publicadas a toda la organización' : 'publicadas solo a usuarios o grupos específicos (50%)'
+    }`,
+    source: 'Tenant · Purview PowerShell',
+  };
+}
+
+function retentionCoverage(policies: { Name: string; Enabled?: boolean; Workload?: string }[]): CheckResult {
+  const active = policies.filter((p) => p.Enabled !== false);
+  if (!active.length) return { value: 0, detail: policies.length ? 'Directivas de retención deshabilitadas' : 'Sin directivas de retención', source: 'Tenant · Purview PowerShell' };
+  const targets = WORKLOADS.slice(0, 3);
+  const covered = targets.filter(([, re]) => active.some((p) => re.test(p.Workload ?? '')));
+  const known = active.some((p) => p.Workload);
+  return {
+    value: known ? covered.length / targets.length : 1,
+    detail: `${active.length} directivas activas (${list(active.map((p) => p.Name))})${known ? `; cubren ${covered.map(([n]) => n).join(', ') || 'ninguna'} de Exchange, SharePoint y OneDrive` : ''}`,
+    source: 'Tenant · Purview PowerShell',
+  };
+}
+
 export function evaluateChecks(scan: ScanResult, deployments: Record<string, DeploymentRecord>, byodAllowed: boolean): MaturityCheck[] {
   const deployed = (id: string) => deployments[id]?.status === 'ok';
   const exo = scan.probe?.exo;
@@ -43,22 +145,12 @@ export function evaluateChecks(scan: ScanResult, deployments: Record<string, Dep
     checks.push({ pillar, id, label, why, weight, ...r });
 
   // ---------------- Entra ID ----------------
-  add('entra', 'mfa-enforced', 'MFA exigido a todos los usuarios', 'Una contraseña filtrada no basta para entrar.', 25,
-    scan.securityDefaults === undefined && !scan.ca
-      ? NE()
-      : scan.ca?.requireMfaAll
-        ? { value: 1, detail: 'Hay una política de Acceso Condicional aplicada que exige MFA a todos', source: 'Tenant · Graph' }
-        : scan.securityDefaults
-          ? { value: 0.8, detail: 'Cubierto por los valores predeterminados de seguridad (MFA básico, sin excepciones ni control por riesgo)', source: 'Tenant · Graph' }
-          : { value: 0, detail: 'Ningún control exige MFA a todos los usuarios', source: 'Tenant · Graph' });
-  add('entra', 'legacy-auth', 'Autenticación heredada bloqueada', 'POP/IMAP/SMTP AUTH permiten saltarse el MFA.', 15,
-    !scan.ca && scan.securityDefaults === undefined
-      ? NE()
-      : scan.ca?.blocksLegacy || scan.securityDefaults
-        ? { value: 1, detail: scan.ca?.blocksLegacy ? 'Política de Acceso Condicional que la bloquea' : 'Bloqueada por los valores predeterminados de seguridad', source: 'Tenant · Graph' }
-        : { value: 0, detail: 'No hay política que la bloquee', source: 'Tenant · Graph' });
-  add('entra', 'mfa-registration', 'Usuarios con MFA registrado (meta ≥ 90%)', 'Solo quien tiene un método registrado puede cumplir MFA.', 20,
-    scan.mfa ? { value: Math.min(1, scan.mfa.pct / 90), detail: `${scan.mfa.registered} de ${scan.mfa.total} usuarios (${scan.mfa.pct}%)`, source: 'Tenant · Graph' } : NE());
+  add('entra', 'mfa-protected', 'Usuarios efectivamente protegidos por MFA', 'Cuenta a cada persona que tiene MFA registrado Y a la que una política se lo exige. Una contraseña filtrada no basta para entrar.', 30,
+    mfaProtected(scan));
+  add('entra', 'mfa-strong', 'Usuarios con método MFA robusto', 'Authenticator, FIDO2/passkey o Windows Hello resisten mejor el phishing que SMS o llamada.', 15,
+    scan.mfa?.total
+      ? { value: scan.mfa.strong / scan.mfa.total, detail: `${scan.mfa.strong} de ${scan.mfa.total} usuarios miembros (${pct(scan.mfa.strong, scan.mfa.total)}%) con método robusto; ${scan.mfa.weakOnly} solo con SMS/teléfono; ${scan.mfa.total - scan.mfa.registered} sin MFA`, source: 'Tenant · Graph' }
+      : NE());
   add('entra', 'admins', 'Administradores globales entre 2 y 4', 'Menos privilegios permanentes reduce el impacto de una cuenta comprometida.', 10,
     scan.globalAdmins === undefined
       ? NE()
@@ -77,17 +169,19 @@ export function evaluateChecks(scan: ScanResult, deployments: Record<string, Dep
     cat('Identity') ? { value: cat('Identity')!.pct / 100, detail: `${cat('Identity')!.pct}% de los puntos de Identidad`, source: 'Tenant · Secure Score' } : NE());
 
   // ---------------- Intune ----------------
-  add('intune', 'enrolled', 'Dispositivos administrados por Intune', 'Sin inscripción no se pueden aplicar políticas.', 20,
-    scan.devices ? { value: scan.devices.total > 0 ? 1 : 0, detail: `${scan.devices.total} dispositivos administrados`, source: 'Tenant · Graph' } : NE());
-  add('intune', 'compliance-policies', 'Políticas de cumplimiento definidas', 'Base para exigir "dispositivo conforme".', 20,
-    scan.intune ? { value: scan.intune.compliancePolicies > 0 ? 1 : 0, detail: `${scan.intune.compliancePolicies} políticas de cumplimiento`, source: 'Tenant · Graph' } : NE());
-  add('intune', 'compliant', 'Dispositivos conformes (meta ≥ 90%)', 'Mide si los equipos cumplen la línea base.', 20,
+  add('intune', 'enrolled', 'Cobertura de dispositivos administrados', 'Proporción de usuarios cuyo equipo está administrado. Sin inscripción no se aplica ninguna política.', 20,
+    scan.devices && scan.users?.members
+      ? { value: Math.min(1, scan.devices.total / scan.users.members), detail: `${scan.devices.total} dispositivos administrados para ${scan.users.members} usuarios miembros (≈${Math.min(100, pct(scan.devices.total, scan.users.members))}%, estimando un equipo por usuario)`, source: 'Tenant · Graph' }
+      : NE());
+  add('intune', 'compliance-policies', 'Plataformas cubiertas por políticas de cumplimiento', 'Cada sistema operativo en uso necesita su propia política.', 15,
+    scan.intune ? compliancePlatforms(scan) : NE());
+  add('intune', 'compliant', 'Dispositivos administrados que cumplen', 'Porcentaje real de equipos conformes (sin metas ni redondeos).', 20,
     scan.devices?.total
-      ? { value: Math.min(1, scan.devices.compliant / scan.devices.total / 0.9), detail: `${scan.devices.compliant} de ${scan.devices.total} conformes`, source: 'Tenant · Graph' }
+      ? { value: scan.devices.compliant / scan.devices.total, detail: `${scan.devices.compliant} de ${scan.devices.total} dispositivos administrados (${pct(scan.devices.compliant, scan.devices.total)}%)`, source: 'Tenant · Graph' }
       : NE('Sin dispositivos para evaluar'));
-  add('intune', 'encrypted', 'Dispositivos cifrados (meta ≥ 95%)', 'Un equipo perdido sin cifrar expone toda su información.', 20,
+  add('intune', 'encrypted', 'Dispositivos administrados cifrados', 'Un equipo perdido sin cifrar expone toda su información.', 20,
     scan.devices?.total
-      ? { value: Math.min(1, scan.devices.encrypted / scan.devices.total / 0.95), detail: `${scan.devices.encrypted} de ${scan.devices.total} cifrados`, source: 'Tenant · Graph' }
+      ? { value: scan.devices.encrypted / scan.devices.total, detail: `${scan.devices.encrypted} de ${scan.devices.total} dispositivos administrados (${pct(scan.devices.encrypted, scan.devices.total)}%)`, source: 'Tenant · Graph' }
       : NE('Sin dispositivos para evaluar'));
   add('intune', 'mam', 'Protección de apps móviles (MAM)', 'Protege el correo en celulares personales.', 10,
     scan.intune
@@ -101,25 +195,25 @@ export function evaluateChecks(scan: ScanResult, deployments: Record<string, Dep
   // ---------------- Defender ----------------
   const safeLinks = (): CheckResult => {
     if (!exo?.safeLinksPolicies) return fallback('defender-safe-links', 'Safe Links');
-    const custom = enabledRules(exo.safeLinksRules);
-    const preset = enabledRules(exo.presetRules);
-    if (custom.length || preset.length) return { value: 1, detail: `Activo: ${list([...custom, ...preset].map((r) => r.Name))}`, source: 'Tenant · Exchange PowerShell' };
+    const cov = ruleCoverage([...enabledRules(exo.safeLinksRules), ...enabledRules(exo.presetRules)]);
+    if (cov) return { ...cov, source: 'Tenant · Exchange PowerShell' };
     if (exo.safeLinksPolicies.some((p) => /built-?in/i.test(p.Name))) return { value: 0.5, detail: 'Solo la protección integrada (Built-In) de Microsoft, sin política propia', source: 'Tenant · Exchange PowerShell' };
     return { value: 0, detail: 'Sin políticas activas', source: 'Tenant · Exchange PowerShell' };
   };
   const safeAttachments = (): CheckResult => {
     if (!exo?.safeAttachmentPolicies) return fallback('defender-safe-attachments', 'Safe Attachments');
-    const custom = enabledRules(exo.safeAttachmentRules);
-    const preset = enabledRules(exo.presetRules);
-    if (custom.length || preset.length) return { value: 1, detail: `Activo: ${list([...custom, ...preset].map((r) => r.Name))}`, source: 'Tenant · Exchange PowerShell' };
+    const cov = ruleCoverage([...enabledRules(exo.safeAttachmentRules), ...enabledRules(exo.presetRules)]);
+    if (cov) return { ...cov, source: 'Tenant · Exchange PowerShell' };
     if (exo.safeAttachmentPolicies.some((p) => /built-?in/i.test(p.Name))) return { value: 0.5, detail: 'Solo la protección integrada (Built-In), sin política propia', source: 'Tenant · Exchange PowerShell' };
     return { value: 0, detail: 'Sin políticas activas', source: 'Tenant · Exchange PowerShell' };
   };
   const antiPhish = (): CheckResult => {
     if (!exo?.antiPhishPolicies) return fallback('defender-anti-phishing', 'Antiphishing');
     const strong = exo.antiPhishPolicies.filter((p) => p.Enabled !== false && (p.EnableMailboxIntelligenceProtection || p.EnableTargetedUserProtection));
-    const presetOn = enabledRules(exo.presetRules).length > 0;
-    if (strong.length || presetOn) return { value: 1, detail: `Protección contra suplantación activa: ${list(strong.map((p) => p.Name).concat(presetOn ? ['directiva preestablecida'] : []))}`, source: 'Tenant · Exchange PowerShell' };
+    // La directiva predeterminada aplica a todos; las personalizadas, según el alcance de su regla
+    if (strong.some((p) => p.IsDefault)) return { value: 1, detail: 'La directiva predeterminada (toda la organización) tiene protección contra suplantación', source: 'Tenant · Exchange PowerShell' };
+    const cov = ruleCoverage([...enabledRules(exo.antiPhishRules).filter((r) => strong.some((p) => p.Name === r.Name)), ...enabledRules(exo.presetRules)]);
+    if (cov) return { ...cov, source: 'Tenant · Exchange PowerShell' };
     return { value: 0.4, detail: 'Solo la directiva predeterminada, sin protección de usuarios/dominios ni inteligencia de buzón', source: 'Tenant · Exchange PowerShell' };
   };
   add('defender', 'safe-links', 'Safe Links (vínculos seguros)', 'Bloquea enlaces de phishing al momento del clic.', 15, safeLinks());
@@ -157,27 +251,16 @@ export function evaluateChecks(scan: ScanResult, deployments: Record<string, Dep
       ? { value: exo.auditEnabled ? 1 : 0, detail: exo.auditEnabled ? 'Activa' : 'Desactivada', source: 'Tenant · Exchange PowerShell' }
       : fallback('purview-audit', 'Auditoría'));
   add('purview', 'dlp', 'Prevención de pérdida de datos (DLP)', 'Detecta y bloquea el envío de datos sensibles fuera de la empresa.', 25,
-    ipps?.dlpPolicies
-      ? (() => {
-          const on = ipps.dlpPolicies.filter((p) => p.Enabled !== false && p.Mode === 'Enable');
-          const test = ipps.dlpPolicies.filter((p) => p.Enabled !== false && /^Test/i.test(p.Mode));
-          const names = [...on.map((p) => `${p.Name} (aplicada)`), ...test.map((p) => `${p.Name} (simulación)`)];
-          return {
-            value: on.length ? 1 : test.length ? 0.6 : 0,
-            detail: ipps.dlpPolicies.length ? `${ipps.dlpPolicies.length} directivas: ${list(names.length ? names : ipps.dlpPolicies.map((p) => `${p.Name} (${p.Mode})`))}` : 'Sin directivas DLP',
-            source: 'Tenant · Purview PowerShell' as const,
-          };
-        })()
-      : fallback('purview-dlp', 'DLP'));
+    ipps?.dlpPolicies ? dlpCoverage(ipps.dlpPolicies) : fallback('purview-dlp', 'DLP'));
   add('purview', 'labels', 'Etiquetas de confidencialidad publicadas', 'Clasifican la información y pueden cifrarla.', 20,
     ipps?.labels
-      ? { value: ipps.labels.length ? (ipps.labelPolicies?.some((p) => p.Enabled !== false) ? 1 : 0.5) : 0, detail: ipps.labels.length ? `${ipps.labels.length} etiquetas (${list(ipps.labels.map((l) => l.DisplayName ?? l.Name))}); ${ipps.labelPolicies?.length ?? 0} directivas de publicación` : 'Sin etiquetas', source: 'Tenant · Purview PowerShell' }
+      ? labelCoverage(ipps)
       : scan.sensitivityLabels
         ? { value: scan.sensitivityLabels.length ? 1 : 0, detail: scan.sensitivityLabels.length ? `${scan.sensitivityLabels.length} etiquetas: ${list(scan.sensitivityLabels)}` : 'Sin etiquetas', source: 'Tenant · Graph' }
         : fallback('purview-labels', 'Etiquetas'));
   add('purview', 'retention', 'Retención de información', 'Conserva la información el tiempo que exige la ley.', 10,
     ipps?.retentionPolicies
-      ? { value: ipps.retentionPolicies.some((p) => p.Enabled !== false) ? 1 : 0, detail: ipps.retentionPolicies.length ? `${ipps.retentionPolicies.length} directivas: ${list(ipps.retentionPolicies.map((p) => p.Name))}` : 'Sin directivas de retención', source: 'Tenant · Purview PowerShell' }
+      ? retentionCoverage(ipps.retentionPolicies)
       : scan.retentionLabels
         ? { value: scan.retentionLabels.length ? 0.6 : 0, detail: scan.retentionLabels.length ? `${scan.retentionLabels.length} etiquetas de retención (las directivas no son legibles vía Graph)` : 'Sin etiquetas de retención', source: 'Tenant · Graph' }
         : fallback('purview-retention', 'Retención'));

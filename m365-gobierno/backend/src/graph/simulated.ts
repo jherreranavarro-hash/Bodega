@@ -206,7 +206,13 @@ export function demoTenant(): Store {
     ],
     '/reports/authenticationmethods/userregistrationdetails': users
       .filter((u) => u.userType === 'Member')
-      .map((u, i) => ({ id: u.id, isMfaRegistered: i % 5 < 3, isAdmin: i < 5 })),
+      .map((u, i) => ({
+        id: u.id,
+        userType: 'member',
+        isMfaRegistered: i % 5 < 3,
+        isAdmin: i < 5,
+        methodsRegistered: i % 5 === 0 ? ['microsoftAuthenticatorPush'] : i % 5 < 3 ? ['mobilePhone'] : [],
+      })),
     '/identity/conditionalaccess/policies': [],
     '/identity/conditionalaccess/namedlocations': [],
     '/devicemanagement/manageddevices': devices,

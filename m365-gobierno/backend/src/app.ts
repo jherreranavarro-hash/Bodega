@@ -422,6 +422,13 @@ export function createApp() {
     const env = activeEnvironment();
     res.json({ environment: env.name, defs: METRIC_DEFS, snapshots: snapshotsOf(env.id) });
   });
+  app.post('/api/metrics/reset', (_req, res) => {
+    const env = activeEnvironment();
+    save((s) => {
+      s.metrics[env.id] = [];
+    });
+    res.json({ ok: true });
+  });
   app.post(
     '/api/metrics/snapshot',
     wrap(async (_req, res) => {

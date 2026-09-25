@@ -11,10 +11,13 @@ export const METRIC_DEFS = [
   { key: 'defender', label: 'Madurez Defender', unit: '%', higherIsBetter: true },
   { key: 'purview', label: 'Madurez Purview', unit: '%', higherIsBetter: true },
   { key: 'secureScore', label: 'Secure Score', unit: '%', higherIsBetter: true },
+  { key: 'mfaEffectivePct', label: 'Usuarios efectivamente protegidos por MFA', unit: '%', higherIsBetter: true },
   { key: 'mfaPct', label: 'Usuarios con MFA registrado', unit: '%', higherIsBetter: true },
+  { key: 'mfaStrongPct', label: 'Usuarios con MFA robusto', unit: '%', higherIsBetter: true },
   { key: 'caEnabled', label: 'Políticas de Acceso Condicional aplicadas', unit: '', higherIsBetter: true },
   { key: 'globalAdmins', label: 'Administradores globales', unit: '', higherIsBetter: false },
   { key: 'devicesManaged', label: 'Dispositivos administrados', unit: '', higherIsBetter: true },
+  { key: 'deviceCoveragePct', label: 'Cobertura de dispositivos (vs usuarios)', unit: '%', higherIsBetter: true },
   { key: 'compliantPct', label: 'Dispositivos conformes', unit: '%', higherIsBetter: true },
   { key: 'encryptedPct', label: 'Dispositivos cifrados', unit: '%', higherIsBetter: true },
   { key: 'findingsHigh', label: 'Hallazgos críticos y altos', unit: '', higherIsBetter: false },
@@ -39,6 +42,10 @@ export function computeMetrics(
   q: Questionnaire = DEFAULT_QUESTIONNAIRE,
 ): MetricValues {
   const rec = recommend(scan, q, deployments);
+  const checkPct = (id: string) => {
+    const v = rec.scores.checks.find((c) => c.id === id)?.value;
+    return v === null || v === undefined ? null : Math.round(v * 100);
+  };
   return {
     overall: rec.scores.overall,
     entra: rec.scores.pillars.entra,
@@ -47,6 +54,9 @@ export function computeMetrics(
     purview: rec.scores.pillars.purview,
     secureScore: scan.secureScore?.pct ?? null,
     mfaPct: scan.mfa?.pct ?? null,
+    mfaEffectivePct: checkPct('mfa-protected'),
+    mfaStrongPct: checkPct('mfa-strong'),
+    deviceCoveragePct: checkPct('enrolled'),
     caEnabled: scan.ca?.enabled ?? null,
     globalAdmins: scan.globalAdmins ?? null,
     devicesManaged: scan.devices?.total ?? null,

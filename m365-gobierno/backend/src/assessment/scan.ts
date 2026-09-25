@@ -9,12 +9,22 @@ export interface ScanResult {
   users?: { members: number; guests: number; disabled: number };
   globalAdmins?: number;
   securityDefaults?: boolean;
-  ca?: { total: number; enabled: number; reportOnly: number; requireMfaAll: boolean; blocksLegacy: boolean; gob: string[] };
-  mfa?: { total: number; registered: number; pct: number };
+  ca?: {
+    total: number;
+    enabled: number;
+    reportOnly: number;
+    requireMfaAll: boolean;
+    blocksLegacy: boolean;
+    gob: string[];
+    /** Usuarios excluidos (directo o por grupo) de la política aplicada de MFA para todos. */
+    mfaAllExcluded?: number;
+  };
+  /** Solo usuarios miembros (sin invitados). */
+  mfa?: { total: number; registered: number; pct: number; strong: number; weakOnly: number };
   authMethods?: Record<string, string>;
   authorization?: { usersCanCreateApps: boolean; guestInvites: string; legacyConsent: boolean };
   devices?: { total: number; compliant: number; noncompliant: number; encrypted: number; byOs: Record<string, number> };
-  intune?: { compliancePolicies: number; configurationProfiles: number; appProtection: number };
+  intune?: { compliancePolicies: number; configurationProfiles: number; appProtection: number; compliancePlatforms?: string[] };
   secureScore?: {
     current: number;
     max: number;
@@ -34,6 +44,20 @@ export interface ScanResult {
 }
 
 const GLOBAL_ADMIN = '62e90394-69f5-4237-9190-012177145e10';
+/** Métodos resistentes o robustos; SMS, llamada y correo se consideran débiles. */
+const STRONG_METHODS = new Set([
+  'microsoftAuthenticatorPush',
+  'microsoftAuthenticatorPasswordless',
+  'softwareOneTimePasscode',
+  'hardwareOneTimePasscode',
+  'fido2SecurityKey',
+  'passKeyDeviceBound',
+  'passKeyDeviceBoundAuthenticator',
+  'passKeyDeviceBoundWindowsHello',
+  'windowsHelloForBusiness',
+  'macOsSecureEnclaveKey',
+  'platformCredential',
+]);
 
 /** Lectura (solo lectura) del estado actual del tenant. Cada área falla de forma independiente. */
 export async function scanTenant(graph: GraphLike, opts: { probe?: () => Promise<ProbeResult> } = {}): Promise<ScanResult> {
@@ -98,14 +122,34 @@ export async function scanTenant(graph: GraphLike, opts: { probe?: () => Promise
         ),
         gob: ps.map((p) => p.displayName).filter((n: string) => n?.startsWith(PREFIX)),
       };
+      const mfaAll = enabled.find(
+        (p) => p.conditions?.users?.includeUsers?.includes('All') && p.grantControls?.builtInControls?.includes('mfa'),
+      );
+      if (mfaAll) {
+        const excluded = new Set<string>((mfaAll.conditions?.users?.excludeUsers ?? []).filter((u: string) => /^[0-9a-f-]{36}$/i.test(u)));
+        for (const g of mfaAll.conditions?.users?.excludeGroups ?? []) {
+          const members = await graph.list<any>(`/groups/${g}/transitiveMembers?$select=id`, { max: 20000 }).catch(() => []);
+          members.forEach((m) => excluded.add(m.id));
+        }
+        r.ca.mfaAllExcluded = excluded.size;
+      }
     }),
     area('Ubicaciones con nombre', async () => {
       r.namedLocations = (await graph.list<any>('/identity/conditionalAccess/namedLocations')).length;
     }),
     area('Registro de MFA', async () => {
-      const d = await graph.list<any>('/reports/authenticationMethods/userRegistrationDetails?$select=id,isMfaRegistered', { max: 20000 });
-      const registered = d.filter((x) => x.isMfaRegistered).length;
-      r.mfa = { total: d.length, registered, pct: d.length ? Math.round((registered / d.length) * 100) : 0 };
+      const all = await graph.list<any>('/reports/authenticationMethods/userRegistrationDetails?$select=id,userType,isMfaRegistered,methodsRegistered', { max: 20000 });
+      // Se mide sobre los usuarios miembros: los invitados se autentican en su propia organización
+      const d = all.filter((x) => (x.userType ?? 'member').toLowerCase() !== 'guest');
+      const registered = d.filter((x) => x.isMfaRegistered);
+      const strong = registered.filter((x) => (x.methodsRegistered ?? []).some((m: string) => STRONG_METHODS.has(m))).length;
+      r.mfa = {
+        total: d.length,
+        registered: registered.length,
+        pct: d.length ? Math.round((registered.length / d.length) * 100) : 0,
+        strong,
+        weakOnly: registered.length - strong,
+      };
     }),
     area('Métodos de autenticación', async () => {
       // La colección no admite GET directo: viene incluida en la política de métodos de autenticación
@@ -136,13 +180,20 @@ export async function scanTenant(graph: GraphLike, opts: { probe?: () => Promise
     }),
     area('Intune', async () => {
       const [c, cfg, sc, ios, android] = await Promise.all([
-        graph.list<any>('/deviceManagement/deviceCompliancePolicies?$select=id'),
+        graph.list<any>('/deviceManagement/deviceCompliancePolicies'),
         graph.list<any>('/deviceManagement/deviceConfigurations?$select=id'),
         graph.list<any>('/deviceManagement/configurationPolicies?$select=id', { beta: true }),
         graph.list<any>('/deviceAppManagement/iosManagedAppProtections?$select=id'),
         graph.list<any>('/deviceAppManagement/androidManagedAppProtections?$select=id'),
       ]);
-      r.intune = { compliancePolicies: c.length, configurationProfiles: cfg.length + sc.length, appProtection: ios.length + android.length };
+      const platformOf = (t: string) =>
+        /windows/i.test(t) ? 'Windows' : /ios/i.test(t) ? 'iOS' : /android/i.test(t) ? 'Android' : /macos/i.test(t) ? 'macOS' : 'Otro';
+      r.intune = {
+        compliancePolicies: c.length,
+        configurationProfiles: cfg.length + sc.length,
+        appProtection: ios.length + android.length,
+        compliancePlatforms: [...new Set(c.map((p: any) => platformOf(String(p['@odata.type'] ?? ''))))],
+      };
     }),
     area('Secure Score', async () => {
       const s = (await graph.list<any>('/security/secureScores?$top=1', { max: 1 }))[0];

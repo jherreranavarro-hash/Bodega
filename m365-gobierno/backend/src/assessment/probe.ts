@@ -6,15 +6,22 @@ import type { PsKind } from '../powershell/runner.js';
  * Compliance PowerShell). Cada bloque falla de forma independiente.
  */
 
+/** Alcance de una regla: toda la organización (todos/dominios) o solo usuarios o grupos específicos. */
+export interface Rule {
+  Name: string;
+  State: string;
+  Scope?: 'todos' | 'dominios' | 'usuarios';
+}
+
 export interface ExoProbe {
   auditEnabled?: boolean;
   safeLinksPolicies?: { Name: string; EnableSafeLinksForEmail?: boolean; EnableSafeLinksForTeams?: boolean }[];
-  safeLinksRules?: { Name: string; State: string }[];
+  safeLinksRules?: Rule[];
   safeAttachmentPolicies?: { Name: string; Enable?: boolean; Action?: string }[];
-  safeAttachmentRules?: { Name: string; State: string }[];
+  safeAttachmentRules?: Rule[];
   antiPhishPolicies?: { Name: string; Enabled?: boolean; IsDefault?: boolean; EnableMailboxIntelligenceProtection?: boolean; EnableTargetedUserProtection?: boolean; EnableOrganizationDomainsProtection?: boolean }[];
-  antiPhishRules?: { Name: string; State: string }[];
-  presetRules?: { Name: string; State: string }[];
+  antiPhishRules?: Rule[];
+  presetRules?: Rule[];
   autoForwardingMode?: string;
   smtpAuthDisabled?: boolean;
   dkim?: { Domain: string; Enabled: boolean }[];
@@ -25,8 +32,8 @@ export interface ExoProbe {
 export interface IppsProbe {
   dlpPolicies?: { Name: string; Mode: string; Enabled?: boolean; Workload?: string }[];
   labels?: { Name: string; DisplayName?: string }[];
-  labelPolicies?: { Name: string; Enabled?: boolean }[];
-  retentionPolicies?: { Name: string; Enabled?: boolean; Mode?: string }[];
+  labelPolicies?: { Name: string; Enabled?: boolean; Exchange?: string }[];
+  retentionPolicies?: { Name: string; Enabled?: boolean; Mode?: string; Workload?: string }[];
   errors?: Record<string, string>;
 }
 
@@ -47,12 +54,12 @@ const arr = (cmd: string, props: string) => `@(${cmd} -ErrorAction Stop | Select
 export const EXO_PROBE = `$r = [ordered]@{}; $e = [ordered]@{}
 ${block('auditEnabled', '(Get-AdminAuditLogConfig -ErrorAction Stop).UnifiedAuditLogIngestionEnabled')}
 ${block('safeLinksPolicies', arr('Get-SafeLinksPolicy', 'Name,EnableSafeLinksForEmail,EnableSafeLinksForTeams'))}
-${block('safeLinksRules', arr('Get-SafeLinksRule', 'Name,@{n="State";e={[string]$_.State}}'))}
+${block('safeLinksRules', arr('Get-SafeLinksRule', 'Name,@{n="State";e={[string]$_.State}},@{n="Scope";e={ if ($_.SentTo -or $_.SentToMemberOf) { "usuarios" } elseif ($_.RecipientDomainIs) { "dominios" } else { "todos" } }}'))}
 ${block('safeAttachmentPolicies', arr('Get-SafeAttachmentPolicy', 'Name,Enable,@{n="Action";e={[string]$_.Action}}'))}
-${block('safeAttachmentRules', arr('Get-SafeAttachmentRule', 'Name,@{n="State";e={[string]$_.State}}'))}
+${block('safeAttachmentRules', arr('Get-SafeAttachmentRule', 'Name,@{n="State";e={[string]$_.State}},@{n="Scope";e={ if ($_.SentTo -or $_.SentToMemberOf) { "usuarios" } elseif ($_.RecipientDomainIs) { "dominios" } else { "todos" } }}'))}
 ${block('antiPhishPolicies', arr('Get-AntiPhishPolicy', 'Name,Enabled,IsDefault,EnableMailboxIntelligenceProtection,EnableTargetedUserProtection,EnableOrganizationDomainsProtection'))}
-${block('antiPhishRules', arr('Get-AntiPhishRule', 'Name,@{n="State";e={[string]$_.State}}'))}
-${block('presetRules', `@(@(Get-ATPProtectionPolicyRule -ErrorAction SilentlyContinue) + @(Get-EOPProtectionPolicyRule -ErrorAction SilentlyContinue) | Select-Object Name,@{n="State";e={[string]$_.State}})`)}
+${block('antiPhishRules', arr('Get-AntiPhishRule', 'Name,@{n="State";e={[string]$_.State}},@{n="Scope";e={ if ($_.SentTo -or $_.SentToMemberOf) { "usuarios" } elseif ($_.RecipientDomainIs) { "dominios" } else { "todos" } }}'))}
+${block('presetRules', `@(@(Get-ATPProtectionPolicyRule -ErrorAction SilentlyContinue) + @(Get-EOPProtectionPolicyRule -ErrorAction SilentlyContinue) | Select-Object Name,@{n="State";e={[string]$_.State}},@{n="Scope";e={ if ($_.SentTo -or $_.SentToMemberOf) { "usuarios" } elseif ($_.RecipientDomainIs) { "dominios" } else { "todos" } }})`)}
 ${block('autoForwardingMode', '[string](Get-HostedOutboundSpamFilterPolicy -Identity Default -ErrorAction Stop).AutoForwardingMode')}
 ${block('smtpAuthDisabled', '(Get-TransportConfig -ErrorAction Stop).SmtpClientAuthenticationDisabled')}
 ${block('dkim', arr('Get-DkimSigningConfig', 'Domain,Enabled'))}
@@ -63,8 +70,8 @@ Write-Output ('${MARK}' + ($r | ConvertTo-Json -Depth 5 -Compress))`;
 export const IPPS_PROBE = `$r = [ordered]@{}; $e = [ordered]@{}
 ${block('dlpPolicies', arr('Get-DlpCompliancePolicy', 'Name,@{n="Mode";e={[string]$_.Mode}},Enabled,@{n="Workload";e={[string]$_.Workload}}'))}
 ${block('labels', arr('Get-Label', 'Name,DisplayName'))}
-${block('labelPolicies', arr('Get-LabelPolicy', 'Name,Enabled'))}
-${block('retentionPolicies', arr('Get-RetentionCompliancePolicy', 'Name,Enabled,@{n="Mode";e={[string]$_.Mode}}'))}
+${block('labelPolicies', arr('Get-LabelPolicy', 'Name,Enabled,@{n="Exchange";e={($_.ExchangeLocation | ForEach-Object { [string]$_ }) -join ","}}'))}
+${block('retentionPolicies', arr('Get-RetentionCompliancePolicy', 'Name,Enabled,@{n="Mode";e={[string]$_.Mode}},@{n="Workload";e={[string]$_.Workload}}'))}
 $r.errors = $e
 Write-Output ('${MARK}' + ($r | ConvertTo-Json -Depth 5 -Compress))`;
 

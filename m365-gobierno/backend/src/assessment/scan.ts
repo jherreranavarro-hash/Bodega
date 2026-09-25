@@ -42,7 +42,8 @@ export async function scanTenant(graph: GraphLike, opts: { probe?: () => Promise
     try {
       await fn();
     } catch (e: any) {
-      r.errors.push({ area: name, message: e?.status === 403 ? 'Sin permiso para leer esta área' : e?.message ?? String(e) });
+      const msg = e?.status === 403 ? 'Sin permiso para leer esta área' : e?.message || (e?.status ? `Error HTTP ${e.status}` : String(e));
+      r.errors.push({ area: name, message: msg });
     }
   };
 
@@ -107,7 +108,9 @@ export async function scanTenant(graph: GraphLike, opts: { probe?: () => Promise
       r.mfa = { total: d.length, registered, pct: d.length ? Math.round((registered / d.length) * 100) : 0 };
     }),
     area('Métodos de autenticación', async () => {
-      const cfg = await graph.list<any>('/policies/authenticationMethodsPolicy/authenticationMethodConfigurations');
+      // La colección no admite GET directo: viene incluida en la política de métodos de autenticación
+      const policy = await graph.get<any>('/policies/authenticationMethodsPolicy');
+      const cfg: any[] = policy?.authenticationMethodConfigurations ?? (await graph.list<any>('/policies/authenticationMethodsPolicy/authenticationMethodConfigurations'));
       r.authMethods = Object.fromEntries(cfg.map((c) => [c.id, c.state]));
     }),
     area('Permisos de usuarios', async () => {
@@ -187,5 +190,12 @@ export async function scanTenant(graph: GraphLike, opts: { probe?: () => Promise
       r.errors.push(...r.probe.errors);
     }),
   ]);
+  // Las lecturas de etiquetas por Graph son complementarias: si Purview se leyó por PowerShell no son un problema
+  const ipps = r.probe?.ipps;
+  const covered: Record<string, boolean> = {
+    'Etiquetas de confidencialidad (Graph)': Boolean(ipps?.labels),
+    'Etiquetas de retención (Graph)': Boolean(ipps?.retentionPolicies),
+  };
+  r.errors = r.errors.filter((e) => !covered[e.area]);
   return r;
 }

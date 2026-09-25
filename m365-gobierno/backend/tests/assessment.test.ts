@@ -63,3 +63,35 @@ describe('madurez basada en el estado real del tenant', () => {
     expect(rec.scores.pillars.purview).not.toBeNull();
   });
 });
+
+describe('lecturas robustas', () => {
+  it('lee los métodos de autenticación desde la política (la colección no admite GET directo)', async () => {
+    const seed = () => {
+      const t = demoTenant();
+      t['/policies/authenticationmethodspolicy'] = {
+        id: 'authenticationMethodsPolicy',
+        authenticationMethodConfigurations: [{ id: 'Sms', state: 'disabled' }],
+      };
+      delete t['/policies/authenticationmethodspolicy/authenticationmethodconfigurations'];
+      return t;
+    };
+    const scan = await scanTenant(new SimulatedGraph(undefined, seed));
+    expect(scan.authMethods).toEqual({ Sms: 'disabled' });
+  });
+
+  it('no reporta como no evaluadas las etiquetas por Graph si Purview se leyó por PowerShell', async () => {
+    const { simulatedProbe } = await import('../src/assessment/probe.js');
+    const probe = simulatedProbe();
+    probe.ipps!.labels = [{ Name: 'Confidencial' }];
+    const graph = new SimulatedGraph(undefined, demoTenant);
+    const orig = graph.list.bind(graph);
+    graph.list = (async (path: string, o?: any) => {
+      if (path.includes('sensitivityLabels')) throw Object.assign(new Error(''), { status: 403 });
+      if (path.includes('retentionLabels')) throw Object.assign(new Error(''), { status: 400 });
+      return orig(path, o);
+    }) as any;
+    const scan = await scanTenant(graph, { probe: async () => probe });
+    expect(scan.errors.map((e) => e.area)).not.toContain('Etiquetas de confidencialidad (Graph)');
+    expect(scan.errors.map((e) => e.area)).not.toContain('Etiquetas de retención (Graph)');
+  });
+});

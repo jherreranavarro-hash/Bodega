@@ -115,11 +115,13 @@ export async function runProbes(run: (kind: PsKind, script: string) => Promise<s
       .then((l) => (result.ipps = parseProbe<IppsProbe>(l)))
       .catch((e) => result.errors.push({ area: 'Purview (DLP, etiquetas, retención)', message: e?.message ?? String(e) })),
   ]);
+  // Datos informativos que no afectan la madurez: sus fallas no se reportan como áreas no evaluadas
+  const nonCritical = new Set(['externalTagging']);
   for (const [area, errs] of [
     ['Exchange Online', result.exo?.errors],
     ['Purview', result.ipps?.errors],
   ] as const) {
-    for (const [k, v] of Object.entries(errs ?? {})) result.errors.push({ area: `${area}: ${k}`, message: String(v) });
+    for (const [k, v] of Object.entries(errs ?? {})) if (!nonCritical.has(k)) result.errors.push({ area: `${area}: ${k}`, message: String(v) });
   }
   return result;
 }

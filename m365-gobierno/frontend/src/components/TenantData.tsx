@@ -1,4 +1,5 @@
 import type { Assessment } from '../types';
+import { PeopleMfa } from './PeopleMfa';
 
 /** Lo que la aplicación leyó realmente del tenant, para contrastarlo con los portales de Microsoft. */
 export function TenantData({ a }: { a: Assessment }) {
@@ -12,6 +13,35 @@ export function TenantData({ a }: { a: Assessment }) {
       <p className="small muted">
         Lectura del {new Date(scan.at ?? a.at).toLocaleString('es-CL')}. Compáralos con los portales de Microsoft para validar la información.
       </p>
+      {Array.isArray(scan.quality) && scan.quality.length > 0 && (
+        <div className="quality">
+          <h3>Control de calidad de los datos</h3>
+          <ul>
+            {scan.quality.map((q: any) => (
+              <li key={q.id} className={`q-${q.status}`}>
+                <span className="q-icon" aria-hidden>
+                  {q.status === 'warn' ? '⚠' : q.status === 'ok' ? '✓' : 'ℹ'}
+                </span>
+                <div>
+                  <b>{q.label}.</b> {q.detail}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {Array.isArray(scan.mfaUsers) && (
+        <details className="people-details" open>
+          <summary>
+            Personas y MFA ({scan.mfaUsers.length} personas{scan.signIns ? ` · inicios de sesión de los últimos ${scan.signIns.days} días` : ''})
+          </summary>
+          <p className="small muted">
+            "MFA registrado" viene del informe de Microsoft; "Con MFA exigido" cuenta los inicios de sesión exitosos en que se pidió MFA. Una persona puede tener
+            MFA registrado y aun así iniciar sesión sin que se le pida.
+          </p>
+          <PeopleMfa people={scan.mfaUsers} days={scan.signIns?.days} />
+        </details>
+      )}
       <div className="data-grid">
         <section>
           <h3>Secure Score por categoría</h3>

@@ -242,14 +242,34 @@ export function AssessmentPage({ goto }: { goto: (p: string) => void }) {
 
               {scan && (
                 <div className="stats">
-                  <Stat label="Licencias Business Premium" value={scan.license ? `${scan.license.assigned}/${scan.license.purchased}` : 'n/e'} />
-                  <Stat label="Usuarios / invitados" value={scan.users ? `${scan.users.members} / ${scan.users.guests}` : 'n/e'} />
+                  <Stat label="Licencias Business Premium asignadas" value={scan.license ? `${scan.license.assigned}/${scan.license.purchased}` : 'n/e'} />
+                  <Stat
+                    label="Personas (miembros habilitados con licencia)"
+                    value={scan.users?.people ?? 'n/e'}
+                    hint={scan.users ? `de ${scan.users.members} cuentas miembro · ${scan.users.guests} invitados` : undefined}
+                  />
                   <Stat label="Administradores globales" value={scan.globalAdmins ?? 'n/e'} warn={scan.globalAdmins > 4} />
-                  <Stat label="Usuarios con MFA" value={scan.mfa ? `${scan.mfa.pct}%` : 'n/e'} warn={scan.mfa?.pct < 90} />
+                  <Stat
+                    label="Personas con MFA registrado"
+                    value={scan.mfa ? `${scan.mfa.pct}%` : 'n/e'}
+                    hint={scan.mfa ? `${scan.mfa.registered} de ${scan.mfa.total} · ${scan.mfa.weakOnly} solo teléfono` : undefined}
+                    warn={scan.mfa?.pct < 90}
+                  />
+                  <Stat
+                    label={`Personas con MFA exigido al iniciar sesión (${scan.signIns?.days ?? 7} días)`}
+                    value={scan.signIns?.people ? `${Math.round((scan.signIns.allMfa / scan.signIns.people) * 100)}%` : 'n/e'}
+                    hint={scan.signIns?.people ? `${scan.signIns.allMfa} siempre · ${scan.signIns.partialMfa} a veces · ${scan.signIns.noMfa} nunca` : 'registros de inicio de sesión no leídos'}
+                    warn={Boolean(scan.signIns?.noMfa)}
+                  />
                   <Stat label="Security defaults" value={scan.securityDefaults === undefined ? 'n/e' : scan.securityDefaults ? 'Activos' : 'Inactivos'} />
                   <Stat label="Políticas de Acceso Condicional" value={scan.ca ? `${scan.ca.enabled} activas / ${scan.ca.total}` : 'n/e'} />
-                  <Stat label="Dispositivos administrados" value={scan.devices ? scan.devices.total : 'n/e'} />
-                  <Stat label="Dispositivos cifrados" value={scan.devices?.total ? `${Math.round((scan.devices.encrypted / scan.devices.total) * 100)}%` : 'n/e'} />
+                  <Stat
+                    label="Dispositivos administrados"
+                    value={scan.devices ? scan.devices.total : 'n/e'}
+                    hint={scan.users?.people ? `para ${scan.users.people} personas` : undefined}
+                    warn={scan.devices && scan.users?.people ? scan.devices.total / scan.users.people < 0.8 : false}
+                  />
+                  <Stat label="Dispositivos cifrados" value={scan.devices?.total ? `${Math.round((scan.devices.encrypted / scan.devices.total) * 100)}%` : 'n/e'} hint="de los administrados" />
                   <Stat label="Secure Score" value={scan.secureScore ? `${scan.secureScore.pct}%` : 'n/e'} warn={scan.secureScore?.pct < 60} />
                 </div>
               )}
@@ -347,11 +367,12 @@ export function AssessmentPage({ goto }: { goto: (p: string) => void }) {
   );
 }
 
-function Stat({ label, value, warn }: { label: string; value: string | number; warn?: boolean }) {
+function Stat({ label, value, warn, hint }: { label: string; value: string | number; warn?: boolean; hint?: string }) {
   return (
     <div className={`stat${warn ? ' warn' : ''}`}>
       <b>{value}</b>
       <span>{label}</span>
+      {hint && <span className="stat-hint">{hint}</span>}
     </div>
   );
 }

@@ -10,7 +10,7 @@ import type { ScanResult } from './scan.js';
  * Fuente del dato: primero la configuración REAL del tenant (Graph / PowerShell / Secure Score);
  * lo desplegado por la aplicación solo se usa cuando el tenant no se pudo leer.
  */
-export type CheckSource = 'Tenant · Graph' | 'Tenant · Exchange PowerShell' | 'Tenant · Purview PowerShell' | 'Tenant · Secure Score' | 'Desplegado por la app' | 'Contexto de la empresa';
+export type CheckSource = 'Tenant · Graph' | 'Tenant · Registros de inicio de sesión' | 'Tenant · Exchange PowerShell' | 'Tenant · Purview PowerShell' | 'Tenant · Secure Score' | 'Desplegado por la app' | 'Contexto de la empresa';
 
 export interface MaturityCheck {
   pillar: Pillar;
@@ -33,8 +33,21 @@ const list = (names: string[], max = 4) => (names.length > max ? `${names.slice(
 
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
 
-/** MFA efectivo = (robusto 100% + solo SMS/teléfono 50%) × proporción a la que se le exige. */
+/**
+ * MFA efectivo. Fuente principal: registros de inicio de sesión reales (¿la sesión exigió MFA?).
+ * Si no se pudieron leer, se estima: (robusto 100% + solo teléfono 50%) × a quién se le exige.
+ */
 function mfaProtected(scan: ScanResult): CheckResult {
+  const si = scan.signIns;
+  if (si?.people) {
+    const value = (si.allMfa + 0.5 * si.partialMfa) / si.people;
+    const inactive = scan.users ? Math.max(0, scan.users.people - si.people) : 0;
+    return {
+      value,
+      detail: `De ${si.people} personas que iniciaron sesión en los últimos ${si.days} días: ${si.allMfa} siempre con MFA exigido, ${si.partialMfa} solo a veces (50%) y ${si.noMfa} nunca${inactive ? ` (${inactive} personas sin inicios de sesión en el período no se consideran)` : ''}. Protección efectiva ≈ ${Math.round(value * 100)}%`,
+      source: 'Tenant · Registros de inicio de sesión',
+    };
+  }
   const m = scan.mfa;
   if (!m?.total) return NE();
   const registeredFactor = (m.strong + 0.5 * m.weakOnly) / m.total;
@@ -45,15 +58,15 @@ function mfaProtected(scan: ScanResult): CheckResult {
     enforcement = Math.max(0, 1 - excluded / m.total);
     how = `Acceso Condicional lo exige a todos${excluded ? ` salvo ${excluded} excluidos` : ''}`;
   } else if (scan.securityDefaults) {
-    enforcement = 0.7;
-    how = 'solo valores predeterminados de seguridad (piden MFA en situaciones de riesgo y dan 14 días para registrarse: se cuenta 70%)';
+    enforcement = 0.5;
+    how = 'solo valores predeterminados de seguridad (piden MFA únicamente en situaciones de riesgo: se estima 50%)';
   } else if (scan.ca === undefined && scan.securityDefaults === undefined) {
     return NE();
   }
   const value = registeredFactor * enforcement;
   return {
     value,
-    detail: `${m.registered} de ${m.total} usuarios miembros registrados (${m.strong} robusto, ${m.weakOnly} solo SMS/teléfono = 50%); ${how}. Protección efectiva ≈ ${Math.round(value * 100)}% de los usuarios`,
+    detail: `ESTIMADO (no se pudieron leer los inicios de sesión): ${m.registered} de ${m.total} personas registradas (${m.strong} robusto, ${m.weakOnly} solo teléfono = 50%); ${how}. Protección ≈ ${Math.round(value * 100)}%`,
     source: 'Tenant · Graph',
   };
 }
@@ -149,7 +162,7 @@ export function evaluateChecks(scan: ScanResult, deployments: Record<string, Dep
     mfaProtected(scan));
   add('entra', 'mfa-strong', 'Usuarios con método MFA robusto', 'Authenticator, FIDO2/passkey o Windows Hello resisten mejor el phishing que SMS o llamada.', 15,
     scan.mfa?.total
-      ? { value: scan.mfa.strong / scan.mfa.total, detail: `${scan.mfa.strong} de ${scan.mfa.total} usuarios miembros (${pct(scan.mfa.strong, scan.mfa.total)}%) con método robusto; ${scan.mfa.weakOnly} solo con SMS/teléfono; ${scan.mfa.total - scan.mfa.registered} sin MFA`, source: 'Tenant · Graph' }
+      ? { value: scan.mfa.strong / scan.mfa.total, detail: `${scan.mfa.strong} de ${scan.mfa.total} personas (${pct(scan.mfa.strong, scan.mfa.total)}%) con método robusto; ${scan.mfa.weakOnly} solo con SMS/teléfono; ${scan.mfa.total - scan.mfa.registered} sin ningún método`, source: 'Tenant · Graph' }
       : NE());
   add('entra', 'admins', 'Administradores globales entre 2 y 4', 'Menos privilegios permanentes reduce el impacto de una cuenta comprometida.', 10,
     scan.globalAdmins === undefined
@@ -170,8 +183,8 @@ export function evaluateChecks(scan: ScanResult, deployments: Record<string, Dep
 
   // ---------------- Intune ----------------
   add('intune', 'enrolled', 'Cobertura de dispositivos administrados', 'Proporción de usuarios cuyo equipo está administrado. Sin inscripción no se aplica ninguna política.', 20,
-    scan.devices && scan.users?.members
-      ? { value: Math.min(1, scan.devices.total / scan.users.members), detail: `${scan.devices.total} dispositivos administrados para ${scan.users.members} usuarios miembros (≈${Math.min(100, pct(scan.devices.total, scan.users.members))}%, estimando un equipo por usuario)`, source: 'Tenant · Graph' }
+    scan.devices && scan.users?.people
+      ? { value: Math.min(1, scan.devices.total / scan.users.people), detail: `${scan.devices.total} dispositivos administrados para ${scan.users.people} personas (≈${Math.min(100, pct(scan.devices.total, scan.users.people))}%, estimando un equipo por persona)`, source: 'Tenant · Graph' }
       : NE());
   add('intune', 'compliance-policies', 'Plataformas cubiertas por políticas de cumplimiento', 'Cada sistema operativo en uso necesita su propia política.', 15,
     scan.intune ? compliancePlatforms(scan) : NE());

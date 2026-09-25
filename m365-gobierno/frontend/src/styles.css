@@ -486,3 +486,14 @@ input[type='text'], input[type='number'], input[type='password'], input:not([typ
 .kv { list-style: none; padding: 0; margin: 0; font-size: .88rem; }
 .kv li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
 .kv li.sub { padding-left: 12px; color: var(--muted); }
+
+/* ---------- QA de datos y personas ---------- */
+.stat-hint { font-size: .74rem; color: var(--muted); margin-top: 2px; }
+.quality ul { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.quality li { display: flex; gap: 8px; font-size: .88rem; padding: 6px 10px; border-radius: 6px; background: var(--surface-2); }
+.quality li.q-warn { background: color-mix(in srgb, #f59e0b 12%, var(--surface)); }
+.q-icon { flex: 0 0 18px; font-weight: 700; }
+.people-details { margin: 8px 0 14px; }
+.people-details summary { font-size: 1rem; }
+.people-mfa input[type='search'] { max-width: 320px; }
+.people-table { max-height: 480px; overflow-y: auto; }

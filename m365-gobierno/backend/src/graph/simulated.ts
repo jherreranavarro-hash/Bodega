@@ -156,7 +156,24 @@ export function demoTenant(): Store {
     userPrincipalName: `usuario${i + 1}@contoso-demo.cl`,
     userType: i < 42 ? 'Member' : 'Guest',
     accountEnabled: i !== 3 && i !== 17,
+    // u5 y u11 simulan buzones compartidos (sin licencia); los invitados no tienen licencia
+    assignedLicenses: i < 42 && i !== 5 && i !== 11 ? [{ skuId: 'spb' }] : [],
   }));
+  // Inicios de sesión: 1/3 con MFA exigido siempre, 1/3 a veces, 1/3 nunca (valores predeterminados)
+  const now = Date.now();
+  const signIns = users
+    .filter((u, i) => i < 42 && i % 7 !== 6)
+    .flatMap((u, i) =>
+      [0, 1, 2].map((k) => ({
+        id: `s-${u.id}-${k}`,
+        userId: u.id,
+        userPrincipalName: u.userPrincipalName,
+        userType: 'member',
+        createdDateTime: new Date(now - (k + 1) * 86_400_000).toISOString(),
+        status: { errorCode: 0 },
+        authenticationRequirement: i % 3 === 0 || (i % 3 === 1 && k === 0) ? 'multiFactorAuthentication' : 'singleFactorAuthentication',
+      })),
+    );
   const oses = ['Windows', 'Windows', 'Windows', 'Windows', 'iOS', 'Android', 'macOS'];
   const devices = Array.from({ length: 31 }, (_, i) => ({
     id: `d${i}`,
@@ -212,7 +229,9 @@ export function demoTenant(): Store {
         isMfaRegistered: i % 5 < 3,
         isAdmin: i < 5,
         methodsRegistered: i % 5 === 0 ? ['microsoftAuthenticatorPush'] : i % 5 < 3 ? ['mobilePhone'] : [],
+        lastUpdatedDateTime: new Date(now - 3_600_000).toISOString(),
       })),
+    '/auditlogs/signins': signIns,
     '/identity/conditionalaccess/policies': [],
     '/identity/conditionalaccess/namedlocations': [],
     '/devicemanagement/manageddevices': devices,

@@ -129,7 +129,12 @@ export function recommend(
     if (scan.globalAdmins < 2) f('few-admins', 'media', 'entra', 'Menos de 2 administradores globales', 'Riesgo de quedar sin acceso. Crea cuentas de emergencia.', ['entra-emergency-access']);
   }
   if (scan.mfa && scan.mfa.pct < 90) {
-    f('mfa-registration', scan.mfa.pct < 60 ? 'alta' : 'media', 'entra', `Solo ${scan.mfa.pct}% de los usuarios miembros tiene MFA registrado`, `${scan.mfa.total - scan.mfa.registered} usuarios sin método MFA y ${scan.mfa.weakOnly} solo con SMS/teléfono.`, ['entra-authenticator', 'entra-registration-campaign', 'entra-tap']);
+    f('mfa-registration', scan.mfa.pct < 60 ? 'alta' : 'media', 'entra', `Solo ${scan.mfa.pct}% de las personas tiene MFA registrado`, `${scan.mfa.total - scan.mfa.registered} usuarios sin método MFA y ${scan.mfa.weakOnly} solo con SMS/teléfono.`, ['entra-authenticator', 'entra-registration-campaign', 'entra-tap']);
+  }
+  if (scan.signIns?.people && scan.signIns.noMfa + scan.signIns.partialMfa > 0) {
+    const si = scan.signIns;
+    const share = (si.noMfa + si.partialMfa) / si.people;
+    f('mfa-usage', share > 0.2 ? 'critica' : 'alta', 'entra', `${si.noMfa} personas iniciaron sesión sin MFA en los últimos ${si.days} días`, `De ${si.people} personas con actividad, ${si.noMfa} nunca tuvieron MFA exigido y ${si.partialMfa} solo a veces. Revise el detalle por persona en "Datos leídos del tenant".`, ['entra-ca-all-users-mfa', 'entra-security-defaults', 'entra-registration-campaign']);
   }
   if (scan.authorization?.legacyConsent) {
     f('user-consent', 'alta', 'entra', 'Usuarios pueden dar consentimiento a cualquier aplicación', 'Riesgo de "consent phishing": apps maliciosas con acceso al correo y archivos.', ['entra-authorization-hardening']);
@@ -145,8 +150,8 @@ export function recommend(
       f('no-devices', 'alta', 'intune', 'Ningún dispositivo administrado por Intune', 'Los equipos acceden a datos de la empresa sin control. Habilita la inscripción automática.', ['entra-device-join', 'intune-compliance', 'intune-autopilot']);
     } else {
       const unencrypted = scan.devices.total - scan.devices.encrypted;
-      const coverage = scan.users?.members ? scan.devices.total / scan.users.members : 1;
-      if (coverage < 0.8) f('device-coverage', coverage < 0.5 ? 'alta' : 'media', 'intune', `Solo ≈${Math.round(coverage * 100)}% de los usuarios tiene su equipo administrado`, `${scan.devices.total} dispositivos en Intune para ${scan.users?.members} usuarios: el resto accede sin control de cumplimiento ni cifrado.`, ['entra-device-join', 'intune-autopilot', 'intune-compliance']);
+      const coverage = scan.users?.people ? scan.devices.total / scan.users.people : 1;
+      if (coverage < 0.8) f('device-coverage', coverage < 0.5 ? 'alta' : 'media', 'intune', `Solo ≈${Math.round(coverage * 100)}% de las personas tiene su equipo administrado`, `${scan.devices.total} dispositivos en Intune para ${scan.users?.people} personas: el resto accede sin control de cumplimiento ni cifrado.`, ['entra-device-join', 'intune-autopilot', 'intune-compliance']);
       if (unencrypted > 0) f('unencrypted', 'alta', 'intune', `${unencrypted} dispositivos sin cifrar`, 'Un equipo perdido expone toda su información.', ['intune-bitlocker', 'intune-compliance']);
       if (scan.devices.noncompliant > 0) f('noncompliant', 'media', 'intune', `${scan.devices.noncompliant} dispositivos no conformes`, 'Revisa el motivo en Intune antes de exigir cumplimiento en Acceso Condicional.', ['intune-compliance']);
     }

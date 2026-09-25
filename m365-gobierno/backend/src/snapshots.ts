@@ -9,12 +9,14 @@ const MAX_SNAPSHOTS = 500;
 
 /** Lee el tenant (solo lectura), calcula las métricas y las agrega a la serie del ambiente. */
 export async function takeSnapshot(env: EnvRef, source: MetricSnapshot['source'], jobId?: string): Promise<MetricSnapshot> {
-  const scan = await scanTenant(graphFor(env));
+  // Las mediciones rápidas (antes/después de desplegar) no releen PowerShell ni los inicios de sesión
+  const scan = await scanTenant(graphFor(env), { signIns: false });
   const s = load();
   const last = s.assessment[env.id] as { questionnaire?: Questionnaire; scan?: ScanResult } | undefined;
   const q = last?.questionnaire;
   // La lectura por PowerShell es lenta: las mediciones reutilizan la del último Assessment
   if (last?.scan?.probe) scan.probe = last.scan.probe;
+  if (last?.scan?.signIns) scan.signIns = last.scan.signIns;
   const snapshot: MetricSnapshot = {
     at: new Date().toISOString(),
     source,

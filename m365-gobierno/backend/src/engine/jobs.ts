@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { deploymentsOf, load, save } from '../store.js';
+import { deploymentsOf, load, save, saveEvidence } from '../store.js';
+import { takeSnapshot } from '../snapshots.js';
+import type { MetricValues } from '../metrics.js';
 import { modeOf, type EnvRef } from '../environments.js';
 import { graphFor, grantedRoles, psRunner, tenantInfo } from '../tenant.js';
 import { executePlan, type ItemResult, type ResolvedItem } from './runner.js';
@@ -18,6 +20,11 @@ export interface Job {
   status: 'en-curso' | 'completado' | 'con-errores' | 'con-pendientes';
   items: { playbookId: string; title: string }[];
   results: ItemResult[];
+  /** Métricas del tenant inmediatamente antes y después del despliegue. */
+  metrics?: { before?: MetricValues; after?: MetricValues };
+  /** Huella SHA-256 del archivo de evidencia. */
+  evidenceHash?: string;
+  tenant?: { initialDomain?: string; defaultDomain?: string };
   log: { at: string; msg: string }[];
 }
 
@@ -59,6 +66,14 @@ export function startJob(items: ResolvedItem[], env: EnvRef, account?: string): 
     try {
       log(`Despliegue iniciado en ${env.name}${account ? ` por ${account}` : ''}: ${items.length} playbooks`);
       const tenant = await tenantInfo(env);
+      job.tenant = { initialDomain: tenant.initialDomain, defaultDomain: tenant.defaultDomain };
+      job.metrics = {};
+      try {
+        log('Midiendo estado inicial del tenant (métricas "antes")…');
+        job.metrics.before = (await takeSnapshot(env, 'antes-despliegue', job.id)).values;
+      } catch (e: any) {
+        log(`⚠ No se pudieron medir las métricas iniciales: ${e?.message ?? e}`);
+      }
       const results = await executePlan(items, {
         graph: graphFor(env),
         mode,
@@ -89,6 +104,24 @@ export function startJob(items: ResolvedItem[], env: EnvRef, account?: string): 
           };
         }
       });
+      try {
+        log('Midiendo estado final del tenant (métricas "después")…');
+        job.metrics.after = (await takeSnapshot(env, 'despues-despliegue', job.id)).values;
+      } catch (e: any) {
+        log(`⚠ No se pudieron medir las métricas finales: ${e?.message ?? e}`);
+      }
+      job.evidenceHash = saveEvidence(job.id, {
+        jobId: job.id,
+        environment: { id: env.id, name: env.name, tier: env.tier, tenantId: env.tenantId },
+        tenant,
+        account,
+        startedAt: job.createdAt,
+        finishedAt: new Date().toISOString(),
+        status: job.status,
+        metrics: job.metrics,
+        results,
+      });
+      log(`Evidencia registrada (SHA-256 ${job.evidenceHash.slice(0, 16)}…)`);
       log(`Despliegue terminado: ${results.length - errors - manual} OK, ${manual} con pasos manuales, ${errors} con error`);
     } catch (e: any) {
       job.status = 'con-errores';
@@ -96,8 +129,10 @@ export function startJob(items: ResolvedItem[], env: EnvRef, account?: string): 
     } finally {
       job.finishedAt = new Date().toISOString();
       running.delete(job.id);
+      // La evidencia detallada vive en su propio archivo; el historial guarda el resumen
+      const summary = { ...job, results: job.results.map(({ evidence: _e, ...r }) => r) };
       save((s) => {
-        s.jobs = [job, ...(s.jobs as Job[])].slice(0, MAX_JOBS);
+        s.jobs = [summary, ...(s.jobs as Job[])].slice(0, MAX_JOBS);
       });
       jobEvents.emit(job.id, { type: 'done', status: job.status });
     }

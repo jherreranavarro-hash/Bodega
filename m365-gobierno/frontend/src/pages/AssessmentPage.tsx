@@ -322,6 +322,9 @@ export function AssessmentPage({ goto }: { goto: (p: string) => void }) {
                       ))}
                     </select>
                   </label>
+                  <button className="btn" onClick={() => goto('documents')}>
+                    Generar declaración y hoja de ruta (documento)
+                  </button>
                   <button className="btn primary" onClick={loadPlan}>
                     Cargar plan recomendado
                   </button>

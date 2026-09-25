@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, getToken } from '../api';
+import { api, getToken, openDocument } from '../api';
 import { useApp } from '../store';
 import { ENGINE_LABEL, pillarLabel, type ItemResult, type Params, type Playbook } from '../types';
 import { ParamForm, cleanParams } from './ParamForm';
@@ -189,6 +189,9 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
             </button>
           </>
         )}
+        <button className="btn ghost" onClick={() => openDocument(`/docs/playbook/${pb.id}`).catch((e) => setError(e.message))}>
+          Procedimiento (documento)
+        </button>
         {(pb.engine === 'exo' || pb.engine === 'ipps') && (
           <button className="btn ghost" onClick={downloadScript} disabled={busy !== null}>
             Descargar script .ps1

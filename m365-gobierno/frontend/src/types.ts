@@ -99,6 +99,24 @@ export interface Job {
   items: { playbookId: string; title: string }[];
   results: ItemResult[];
   log?: { at: string; msg: string }[];
+  metrics?: { before?: MetricValues; after?: MetricValues };
+  evidenceHash?: string;
+}
+
+export type MetricValues = Record<string, number | null>;
+
+export interface MetricDef {
+  key: string;
+  label: string;
+  unit: string;
+  higherIsBetter: boolean;
+}
+
+export interface MetricSnapshot {
+  at: string;
+  source: 'assessment' | 'antes-despliegue' | 'despues-despliegue' | 'manual';
+  jobId?: string;
+  values: MetricValues;
 }
 
 export interface Questionnaire {

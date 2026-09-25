@@ -9,11 +9,15 @@ import { ConnectionPage } from './pages/ConnectionPage';
 import { TileModal } from './components/TileModal';
 import { JobMonitor } from './components/JobMonitor';
 import { EnvSwitcher } from './components/EnvSwitcher';
+import { MetricsPage } from './pages/MetricsPage';
+import { DocumentsPage } from './pages/DocumentsPage';
 
 const PAGES = [
   ['map', 'Mapa'],
   ['assessment', 'Assessment'],
   ['plan', 'Plan de despliegue'],
+  ['metrics', 'Métricas'],
+  ['documents', 'Documentos'],
   ['history', 'Historial'],
   ['connection', 'Conexión'],
 ] as const;
@@ -92,6 +96,8 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         {page === 'map' && <MapPage goto={goto} />}
         {page === 'assessment' && <AssessmentPage goto={goto} />}
         {page === 'plan' && <PlanPage goto={goto} />}
+        {page === 'metrics' && <MetricsPage />}
+        {page === 'documents' && <DocumentsPage goto={goto} />}
         {page === 'history' && <HistoryPage />}
         {page === 'connection' && <ConnectionPage />}
       </main>

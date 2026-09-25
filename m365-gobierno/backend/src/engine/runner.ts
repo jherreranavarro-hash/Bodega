@@ -3,6 +3,7 @@ import type { GraphLike } from '../graph/client.js';
 import { getPlaybook } from '../playbooks/index.js';
 import { PowerShellUnavailableError, type PsKind } from '../powershell/runner.js';
 import type { Ctx, ParamDef, Params, PlanStep, Playbook, Profile, TenantInfo } from './types.js';
+import { EvidenceGraph, clip, type EvidenceEntry } from './evidence.js';
 
 export interface PlanItemInput {
   playbookId: string;
@@ -27,6 +28,10 @@ export interface ItemResult {
   error?: string;
   missingPermissions: string[];
   autoAdded: boolean;
+  /** Parámetros con los que se ejecutó. */
+  params?: Params;
+  /** Solo en despliegues: estado anterior y posterior de cada recurso modificado. */
+  evidence?: EvidenceEntry[];
 }
 
 function coerce(def: ParamDef, value: unknown): unknown {
@@ -176,6 +181,23 @@ export async function executePlan(items: ResolvedItem[], o: ExecuteOptions): Pro
       result = { ...base, status: 'omitido', steps: [], error: `Omitido porque falló: ${blockedBy.join(', ')}` };
     } else {
       log(`▶ ${pb.title}`);
+      // En despliegues cada playbook usa un cliente que registra el antes/después de sus escrituras
+      const recorder = o.dryRun ? undefined : new EvidenceGraph(o.graph);
+      ctx.graph = recorder ?? o.graph;
+      const scriptEvidence: EvidenceEntry[] = [];
+      ctx.runPowerShell = async (kind, script) => {
+        const lines = await o.runPowerShell(kind, script);
+        scriptEvidence.push({
+          at: new Date().toISOString(),
+          method: 'SCRIPT',
+          api: 'powershell',
+          resource: kind === 'exo' ? 'Exchange Online PowerShell' : 'Security & Compliance PowerShell',
+          before: 'Evaluado por el script: cada bloque consulta el estado actual (Get-*) y solo crea o modifica lo que difiere.',
+          after: clip({ salida: lines }),
+          request: script,
+        });
+        return lines;
+      };
       try {
         result = await runOne(pb, params, ctx, o);
         result = { ...base, ...result };
@@ -185,6 +207,8 @@ export async function executePlan(items: ResolvedItem[], o: ExecuteOptions): Pro
         log(`✖ ${pb.title}: ${msg}`);
         result = { ...base, status: 'error', steps: [], error: msg };
       }
+      result.params = params;
+      if (recorder) result.evidence = [...recorder.entries, ...scriptEvidence];
     }
     results.push(result);
     o.onResult?.(result);

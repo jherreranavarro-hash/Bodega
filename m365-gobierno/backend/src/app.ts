@@ -24,7 +24,12 @@ import {
 import { forgetTenant, graphFor, grantedRoles, psRunner, simulatedGraph, tenantInfo } from './tenant.js';
 import { buildScript, pwshAvailable } from './powershell/runner.js';
 import { scanTenant } from './assessment/scan.js';
-import { DEFAULT_QUESTIONNAIRE, PHASES, recommend, type Questionnaire } from './assessment/recommend.js';
+import { DEFAULT_QUESTIONNAIRE, PHASES, recommend, type Questionnaire, type Recommendation } from './assessment/recommend.js';
+import { renderEvidence, renderPillarPolicy, renderPlaybookProcedure, renderRoadmap, type DocContext } from './docs/render.js';
+import { METRIC_DEFS, computeMetrics } from './metrics.js';
+import { recordSnapshot, snapshotsOf, takeSnapshot } from './snapshots.js';
+import { loadEvidence } from './store.js';
+import type { Pillar } from './engine/types.js';
 
 const wrap =
   (fn: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) =>
@@ -60,6 +65,31 @@ function validatedInLower(): Record<string, string[]> {
   }
   return out;
 }
+
+async function docContext(env: EnvRef, query: Record<string, unknown>): Promise<DocContext> {
+  const s = load();
+  const assessment = s.assessment[env.id] as { at?: string; questionnaire?: Questionnaire; scan?: any; recommendation?: Recommendation } | undefined;
+  let tenantDomain: string | undefined;
+  if (envView(env).connected) {
+    const t = await tenantInfo(env).catch(() => undefined);
+    tenantDomain = t?.defaultDomain ?? t?.initialDomain;
+  }
+  const text = (k: string) => (typeof query[k] === 'string' ? String(query[k]).slice(0, 120) : undefined);
+  return {
+    org: assessment?.questionnaire?.company || assessment?.scan?.org?.name || env.name,
+    envName: env.name,
+    envTier: env.tier,
+    tenantDomain,
+    author: text('author') ?? signedInAccountOf(env),
+    approver: text('approver'),
+    deployments: s.deployments[env.id] ?? {},
+    planParams: Object.fromEntries(s.plan.map((p) => [p.playbookId, p.params ?? {}])),
+    recommendation: assessment?.recommendation,
+    assessmentAt: assessment?.at,
+  };
+}
+
+const signedInAccountOf = (env: EnvRef) => (env.kind === 'delegado' ? signedInAccount(env.id) : undefined);
 
 export function createApp() {
   const app = express();
@@ -326,7 +356,66 @@ export function createApp() {
       save((s) => {
         s.assessment[env.id] = result;
       });
+      recordSnapshot(env.id, { at: result.at, source: 'assessment', values: computeMetrics(scan, load().deployments[env.id] ?? {}, q) });
       res.json(result);
+    }),
+  );
+
+  // ---------- Documentos formales (HTML imprimible) ----------
+  const sendDoc = (res: Response, html: string) => {
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'");
+    res.type('html').send(html);
+  };
+  app.get(
+    '/api/docs/roadmap',
+    wrap(async (req, res) => {
+      const env = activeEnvironment();
+      const start = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.start ?? '')) ? String(req.query.start) : new Date().toISOString().slice(0, 10);
+      const weeks = String(req.query.weeks ?? '1,2,4,6,8')
+        .split(',')
+        .map((n) => Math.min(52, Math.max(1, Number(n) || 2)));
+      sendDoc(res, renderRoadmap(await docContext(env, req.query), { start, weeks }));
+    }),
+  );
+  app.get(
+    '/api/docs/policy/:pillar',
+    wrap(async (req, res) => {
+      const pillar = req.params.pillar as Pillar;
+      if (!['entra', 'intune', 'defender', 'purview'].includes(pillar)) return res.status(404).json({ error: 'Módulo inexistente' });
+      sendDoc(res, renderPillarPolicy(pillar, await docContext(activeEnvironment(), req.query)));
+    }),
+  );
+  app.get(
+    '/api/docs/playbook/:id',
+    wrap(async (req, res) => {
+      const pb = getPlaybook(req.params.id);
+      if (!pb) return res.status(404).json({ error: 'Playbook inexistente' });
+      sendDoc(res, renderPlaybookProcedure(pb, await docContext(activeEnvironment(), req.query)));
+    }),
+  );
+  app.get(
+    '/api/docs/evidence/:jobId',
+    wrap(async (req, res) => {
+      const ev = loadEvidence(req.params.jobId);
+      if (!ev) return res.status(404).json({ error: 'No hay evidencia para este despliegue' });
+      const env = getEnvironment(ev.record.environment?.id) ?? activeEnvironment();
+      if (req.query.format === 'json') {
+        res.setHeader('Content-Disposition', `attachment; filename="evidencia-${req.params.jobId}.json"`);
+        return res.json({ sha256: ev.hash, integra: ev.valid, ...ev.record });
+      }
+      sendDoc(res, renderEvidence(ev, await docContext(env, req.query)));
+    }),
+  );
+
+  // ---------- Métricas (antes / después) ----------
+  app.get('/api/metrics', (_req, res) => {
+    const env = activeEnvironment();
+    res.json({ environment: env.name, defs: METRIC_DEFS, snapshots: snapshotsOf(env.id) });
+  });
+  app.post(
+    '/api/metrics/snapshot',
+    wrap(async (_req, res) => {
+      res.status(201).json(await takeSnapshot(activeEnvironment(), 'manual'));
     }),
   );
 
@@ -336,6 +425,7 @@ export function createApp() {
       delete s.deployments.simulacion;
       delete s.manualDone.simulacion;
       delete s.assessment.simulacion;
+      delete s.metrics.simulacion;
     });
     res.json({ ok: true });
   });

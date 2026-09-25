@@ -28,6 +28,31 @@ frontend/  Aplicación web (React + Vite): mapa, fichas, assessment, plan, histo
    petición a Graph o el script PowerShell). No escribe nada.
 5. **Desplegar** — ejecuta en orden, con registro en vivo e historial trazable.
 
+## Gobierno documental, evidencia y métricas
+
+**Documentos formales** (página *Documentos*; se abren listos para imprimir/guardar como PDF,
+con tabla de aprobaciones para firma):
+
+| Código | Documento | Contenido |
+|---|---|---|
+| GOB-DEC-01 | Declaración de aplicabilidad y hoja de ruta | Declaración formal, hallazgos del Assessment, hoja de ruta con fechas por fase, **SoA ISO/IEC 27001:2022** (estado por control) y matriz de la **Ley 21.719** |
+| GOB-POL-IAM / END / THR / DAT | Política por módulo (Entra ID, Intune, Defender, Purview) | Objetivo, alcance, referencias normativas, roles, declaraciones con los valores configurados, excepciones, revisión |
+| GOB-PRC-&lt;acción&gt; | Procedimiento de ejecución por playbook | Justificación, configuración, impacto, prerrequisitos, pasos DEV→POC→PRD, criterios de aceptación, plan de reversa, controles |
+| GOB-EVD-&lt;id&gt; | Acta de evidencia de despliegue | Por cada recurso modificado: **cómo estaba y cómo quedó**, métricas antes/después, controles ISO 27001 y deberes de la Ley 21.719; huella **SHA-256** que detecta alteraciones |
+
+**Evidencia:** cada despliegue lee cada recurso antes y después de escribirlo (Graph) o
+registra el script y su salida (PowerShell). Se guarda en `backend/data/evidencia/<id>.json`
++ `.sha256`, y se descarga como acta o JSON desde *Historial* o *Documentos*.
+
+**Métricas:** cada Assessment, cada despliegue (antes y después) y cada medición manual guardan
+una instantánea por ambiente: madurez global y por módulo, Secure Score, % MFA, Acceso
+Condicional aplicado, administradores globales, dispositivos administrados/conformes/cifrados,
+hallazgos críticos+altos y controles desplegados. La página *Métricas* compara línea base vs
+actual y muestra la evolución y el antes/después de cada despliegue.
+
+La correspondencia con ISO 27001 y la Ley 21.719 está en `backend/src/compliance/controls.ts`.
+Las referencias legales son orientativas y deben validarse con asesoría legal.
+
 ## Qué automatiza
 
 | Pilar | Automatizado | Motor |

@@ -58,3 +58,34 @@ export async function signInWithMicrosoft(envId: string) {
   const { url } = await api<{ url: string }>(`/auth/login/${envId}`, { body: {} });
   window.location.assign(url);
 }
+
+/**
+ * Abre un documento generado por el backend en una pestaña nueva. Se descarga con la cabecera
+ * de sesión (el token no viaja en la URL) y se muestra como blob; desde ahí se imprime a PDF.
+ */
+export async function openDocument(path: string, query: Record<string, string | undefined> = {}) {
+  const win = window.open('', '_blank');
+  if (win) win.document.write('<p style="font-family:sans-serif;padding:24px">Generando documento…</p>');
+  const q = new URLSearchParams(Object.entries(query).filter(([, v]) => v) as [string, string][]);
+  const res = await fetch(`/api${path}${q.toString() ? `?${q}` : ''}`, { headers: { Authorization: `Bearer ${getToken() ?? ''}` } });
+  if (!res.ok) {
+    const msg = (await res.json().catch(() => ({}))).error ?? 'No se pudo generar el documento';
+    win?.close();
+    throw new Error(msg);
+  }
+  const url = URL.createObjectURL(new Blob([await res.text()], { type: 'text/html' }));
+  if (win) win.location.href = url;
+  else window.location.href = url;
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function downloadFile(path: string, filename: string) {
+  const res = await fetch(`/api${path}`, { headers: { Authorization: `Bearer ${getToken() ?? ''}` } });
+  if (!res.ok) throw new Error('No se pudo descargar');
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}

@@ -416,3 +416,54 @@ input[type='text'], input[type='number'], input[type='password'], input:not([typ
 .confirm-type { margin-top: 12px; }
 .ok-card { border-color: #16a34a; background: color-mix(in srgb, #16a34a 8%, var(--surface)); }
 .small-modal .card { box-shadow: none; }
+
+/* ---------- Métricas ---------- */
+:root {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --good: #15803d;
+  --bad: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --good: #4ade80;
+    --bad: #f87171;
+  }
+}
+.page-head { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: flex-start; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.metric-tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+.metric-label { font-size: .8rem; color: var(--muted); }
+.metric-value { font-size: 1.6rem; line-height: 1.2; }
+.delta { font-size: .78rem; font-weight: 700; }
+.delta.better { color: var(--good); }
+.delta.worse { color: var(--bad); }
+.delta.neutral { color: var(--muted); font-weight: 400; }
+.chart-card { position: relative; }
+.linechart { position: relative; width: 100%; }
+.linechart svg { display: block; overflow: visible; }
+.linechart .grid { stroke: var(--border); stroke-width: 1; }
+.linechart .axis { fill: var(--muted); font-size: 11px; }
+.linechart .crosshair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.linechart .direct-label { fill: var(--text); font-size: 11.5px; font-weight: 600; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 14px; font-size: .82rem; margin-bottom: 6px; }
+.legend-row i, .chart-tip i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+.chart-tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow); padding: 8px 10px; font-size: .8rem; min-width: 170px; }
+.table-scroll { overflow-x: auto; }
+
+/* ---------- Documentos ---------- */
+.doc-field { display: inline-flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 600; margin-right: 16px; min-width: 260px; }
+.doc-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 10px 0 14px; }
+.doc-form label { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; font-weight: 600; }
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.doc-card { border: 1px solid var(--border); border-top: 4px solid; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.doc-card .btn { align-self: flex-start; }
+.doc-list { list-style: none; padding: 0; margin: 0; }
+.doc-list li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: .9rem; }
+.doc-actions { display: flex; gap: 12px; }

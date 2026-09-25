@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { api, openDocument } from '../api';
 import { useApp } from '../store';
 import type { Job } from '../types';
 import { ResultCard } from '../components/StepList';
@@ -42,6 +42,14 @@ export function HistoryPage() {
           </button>
           {open?.id === j.id && (
             <div className="job-detail">
+              {open.evidenceHash && (
+                <p className="small">
+                  <button className="btn" onClick={() => openDocument(`/docs/evidence/${open.id}`)}>
+                    Acta de evidencia (antes / después)
+                  </button>{' '}
+                  <span className="muted">SHA-256 {open.evidenceHash.slice(0, 16)}…</span>
+                </p>
+              )}
               <details>
                 <summary>Registro ({open.log?.length ?? 0} líneas)</summary>
                 <pre className="code">{open.log?.map((l) => `${l.at.slice(11, 19)}  ${l.msg}`).join('\n')}</pre>

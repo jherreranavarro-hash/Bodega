@@ -511,7 +511,7 @@ export const entraPlaybooks: Playbook[] = [
     profiles: ['esencial', 'recomendado', 'estricto'],
     params: [],
     dependsOn: ['entra-ca-admins-mfa', 'entra-ca-all-users-mfa', 'entra-ca-block-legacy'],
-    permissions: ['Policy.Read.All', 'Policy.ReadWrite.ConditionalAccess'],
+    permissions: ['Policy.Read.All', 'Policy.ReadWrite.ConditionalAccess', 'Policy.ReadWrite.SecurityDefaults'],
     docsUrl: 'https://learn.microsoft.com/entra/fundamentals/security-defaults',
     run: async (ctx) => {
       const steps: PlanStep[] = [];

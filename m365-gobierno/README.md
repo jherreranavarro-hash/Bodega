@@ -105,7 +105,18 @@ cd backend; npm run revisar-accesos -- contoso.onmicrosoft.com
 Muestra un código para ingresar en https://microsoft.com/devicelogin: la contraseña y el MFA se
 ingresan en tu navegador. Solo pide permisos de lectura y no modifica nada.
 
-### Registro de aplicación (una vez por tenant)
+### Registro de aplicación automático
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\crear-registro-app.ps1 -Tenant contoso.onmicrosoft.com
+```
+
+Crea el registro "Gobierno M365" (sin secretos, cliente público con la URI de redirección),
+concede los permisos delegados con consentimiento de administrador y restringe su uso a las
+cuentas asignadas (quien lo ejecuta y las indicadas en `-Administradores`). Muestra el Tenant ID
+y el Client ID para agregar el ambiente en la app. Pide confirmación antes de escribir.
+
+### Registro de aplicación manual (una vez por tenant)
 
 1. Entra ID → Registros de aplicaciones → **Nuevo registro** (solo este directorio).
 2. Autenticación → Agregar plataforma → **Aplicaciones móviles y de escritorio** → URI de

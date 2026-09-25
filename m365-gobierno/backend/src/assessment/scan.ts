@@ -1,5 +1,6 @@
 import type { GraphLike } from '../graph/client.js';
 import { PREFIX } from '../engine/helpers.js';
+import type { ProbeResult } from './probe.js';
 
 export interface ScanResult {
   at: string;
@@ -14,7 +15,19 @@ export interface ScanResult {
   authorization?: { usersCanCreateApps: boolean; guestInvites: string; legacyConsent: boolean };
   devices?: { total: number; compliant: number; noncompliant: number; encrypted: number; byOs: Record<string, number> };
   intune?: { compliancePolicies: number; configurationProfiles: number; appProtection: number };
-  secureScore?: { current: number; max: number; pct: number };
+  secureScore?: {
+    current: number;
+    max: number;
+    pct: number;
+    /** Por categoría de Secure Score (Identity, Data, Device, Apps…), calculado desde controlScores. */
+    categories?: Record<string, { score: number; max: number; pct: number }>;
+    controls?: { name: string; title: string; category: string; service?: string; score: number; max: number }[];
+  };
+  /** Etiquetas de confidencialidad leídas vía Graph. */
+  sensitivityLabels?: string[];
+  retentionLabels?: string[];
+  /** Configuración leída vía PowerShell (Defender for Office, auditoría, DLP, retención). */
+  probe?: ProbeResult;
   sharepoint?: { sharingCapability: string };
   namedLocations?: number;
   errors: { area: string; message: string }[];
@@ -23,7 +36,7 @@ export interface ScanResult {
 const GLOBAL_ADMIN = '62e90394-69f5-4237-9190-012177145e10';
 
 /** Lectura (solo lectura) del estado actual del tenant. Cada área falla de forma independiente. */
-export async function scanTenant(graph: GraphLike): Promise<ScanResult> {
+export async function scanTenant(graph: GraphLike, opts: { probe?: () => Promise<ProbeResult> } = {}): Promise<ScanResult> {
   const r: ScanResult = { at: new Date().toISOString(), errors: [] };
   const area = async (name: string, fn: () => Promise<void>) => {
     try {
@@ -130,10 +143,48 @@ export async function scanTenant(graph: GraphLike): Promise<ScanResult> {
     }),
     area('Secure Score', async () => {
       const s = (await graph.list<any>('/security/secureScores?$top=1', { max: 1 }))[0];
-      if (s) r.secureScore = { current: Math.round(s.currentScore), max: Math.round(s.maxScore), pct: Math.round((s.currentScore / s.maxScore) * 100) };
+      if (!s) return;
+      r.secureScore = { current: Math.round(s.currentScore), max: Math.round(s.maxScore), pct: Math.round((s.currentScore / s.maxScore) * 100) };
+      try {
+        const profiles = await graph.list<any>('/security/secureScoreControlProfiles?$select=id,title,maxScore,controlCategory,service,deprecated', { max: 1000 });
+        const byId = new Map(profiles.filter((p) => !p.deprecated).map((p) => [p.id, p]));
+        const controls = (s.controlScores ?? [])
+          .map((c: any) => {
+            const p = byId.get(c.controlName);
+            return p
+              ? { name: c.controlName, title: p.title, category: c.controlCategory ?? p.controlCategory, service: p.service, score: Number(c.score ?? 0), max: Number(p.maxScore ?? 0) }
+              : null;
+          })
+          .filter((c: any) => c && c.max > 0);
+        const categories: Record<string, { score: number; max: number; pct: number }> = {};
+        for (const c of controls) {
+          const k = c.category ?? 'Otros';
+          categories[k] ??= { score: 0, max: 0, pct: 0 };
+          categories[k].score += c.score;
+          categories[k].max += c.max;
+        }
+        for (const v of Object.values(categories)) v.pct = v.max ? Math.round((v.score / v.max) * 100) : 0;
+        r.secureScore.categories = categories;
+        r.secureScore.controls = controls;
+      } catch (e: any) {
+        r.errors.push({ area: 'Secure Score (detalle por control)', message: e?.status === 403 ? 'Sin permiso para leer (403)' : e?.message ?? String(e) });
+      }
+    }),
+    area('Etiquetas de confidencialidad (Graph)', async () => {
+      const labels = await graph.list<any>('/security/informationProtection/sensitivityLabels', { beta: true });
+      r.sensitivityLabels = labels.map((l) => l.name ?? l.displayName);
+    }),
+    area('Etiquetas de retención (Graph)', async () => {
+      const labels = await graph.list<any>('/security/labels/retentionLabels?$select=displayName');
+      r.retentionLabels = labels.map((l) => l.displayName);
     }),
     area('SharePoint', async () => {
       r.sharepoint = { sharingCapability: (await graph.get<any>('/admin/sharepoint/settings'))?.sharingCapability };
+    }),
+    area('PowerShell (Defender for Office 365 y Purview)', async () => {
+      if (!opts.probe) return;
+      r.probe = await opts.probe();
+      r.errors.push(...r.probe.errors);
     }),
   ]);
   return r;

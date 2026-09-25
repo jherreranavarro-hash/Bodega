@@ -36,7 +36,8 @@ $GraphScopes = @(
   'DeviceManagementApps.ReadWrite.All', 'DeviceManagementManagedDevices.Read.All',
   'SharePointTenantSettings.ReadWrite.All',
   'AuditLog.Read.All', 'UserAuthenticationMethod.Read.All', 'RoleManagement.Read.Directory',
-  'SecurityEvents.Read.All', 'Reports.Read.All'
+  'SecurityEvents.Read.All', 'Reports.Read.All',
+  'InformationProtectionPolicy.Read', 'RecordsManagement.Read.All'
 )
 $ExchangeScopes = @('Exchange.Manage')
 

@@ -28,6 +28,7 @@ import { DEFAULT_QUESTIONNAIRE, PHASES, recommend, type Questionnaire, type Reco
 import { renderEvidence, renderPillarPolicy, renderPlaybookProcedure, renderRoadmap, type DocContext } from './docs/render.js';
 import { METRIC_DEFS, computeMetrics } from './metrics.js';
 import { recordSnapshot, snapshotsOf, takeSnapshot } from './snapshots.js';
+import { runProbes, simulatedProbe } from './assessment/probe.js';
 import { loadEvidence } from './store.js';
 import type { Pillar } from './engine/types.js';
 
@@ -86,6 +87,15 @@ async function docContext(env: EnvRef, query: Record<string, unknown>): Promise<
     planParams: Object.fromEntries(s.plan.map((p) => [p.playbookId, p.params ?? {}])),
     recommendation: assessment?.recommendation,
     assessmentAt: assessment?.at,
+  };
+}
+
+/** Lectura por PowerShell de Defender for Office 365 y Purview (en simulación, datos de ejemplo). */
+function probeFor(env: EnvRef) {
+  return async () => {
+    if (env.kind === 'simulacion') return simulatedProbe();
+    const tenant = await tenantInfo(env);
+    return runProbes(psRunner(env, tenant, () => {}));
   };
 }
 
@@ -350,7 +360,7 @@ export function createApp() {
       const env = activeEnvironment();
       const q: Questionnaire = { ...DEFAULT_QUESTIONNAIRE, ...(req.body?.questionnaire ?? {}) };
       const profile = PROFILES.includes(req.body?.profile) ? (req.body.profile as Profile) : undefined;
-      const scan = await scanTenant(graphFor(env));
+      const scan = await scanTenant(graphFor(env), { probe: probeFor(env) });
       const recommendation = recommend(scan, q, load().deployments[env.id] ?? {}, profile);
       const result = { at: new Date().toISOString(), mode: modeOf(env), environment: env.name, questionnaire: q, scan, recommendation };
       save((s) => {

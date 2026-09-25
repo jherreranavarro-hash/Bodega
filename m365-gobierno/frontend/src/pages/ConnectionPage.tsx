@@ -295,6 +295,8 @@ export function ConnectionPage() {
             'DeviceManagementManagedDevices.Read.All',
             'SecurityEvents.Read.All',
             'Reports.Read.All',
+            'InformationProtectionPolicy.Read',
+            'RecordsManagement.Read.All',
           ].map((p) => (
             <div key={p} className="perm muted">
               • <code>{p}</code> (Assessment)

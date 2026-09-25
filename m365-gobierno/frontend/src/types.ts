@@ -157,7 +157,7 @@ export interface Assessment {
   recommendation: {
     profile: Profile;
     profileReasons: string[];
-    scores: { overall: number; pillars: Record<Pillar, number | null> };
+    scores: { overall: number; pillars: Record<Pillar, number | null>; checks?: MaturityCheck[] };
     findings: Finding[];
     items: RecommendedItem[];
     roadmap: { phase: number; name: string; description: string; playbooks: string[] }[];
@@ -225,3 +225,14 @@ export const ENGINE_LABEL: Record<Engine, string> = {
   ipps: 'Automático · Purview PowerShell',
   manual: 'Guiado · pasos en el portal',
 };
+
+export interface MaturityCheck {
+  pillar: Pillar;
+  id: string;
+  label: string;
+  why: string;
+  weight: number;
+  value: number | null;
+  detail: string;
+  source: string | null;
+}

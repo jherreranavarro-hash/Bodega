@@ -467,3 +467,22 @@ input[type='text'], input[type='number'], input[type='password'], input:not([typ
 .doc-list { list-style: none; padding: 0; margin: 0; }
 .doc-list li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: .9rem; }
 .doc-actions { display: flex; gap: 12px; }
+
+/* ---------- Selección del plan y desglose de madurez ---------- */
+.select-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.select-bar > span { margin-right: 6px; }
+.row-selected { background: color-mix(in srgb, var(--primary) 7%, transparent); }
+.pbar { width: 100%; background: none; border: 0; padding: 2px 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.pbar:hover span { text-decoration: underline; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.tabs button { --chip: #475569; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: .85rem; cursor: pointer; }
+.tabs button.on { background: var(--chip); border-color: var(--chip); color: #fff; }
+.res { font-weight: 700; white-space: nowrap; font-size: .85rem; }
+.res-ok { color: var(--good); }
+.res-part { color: var(--warn); }
+.res-no { color: var(--bad); }
+.res-ne { color: var(--muted); font-weight: 400; }
+.data-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.kv { list-style: none; padding: 0; margin: 0; font-size: .88rem; }
+.kv li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.kv li.sub { padding-left: 12px; color: var(--muted); }

@@ -1,4 +1,4 @@
-import { scanTenant } from './assessment/scan.js';
+import { scanTenant, type ScanResult } from './assessment/scan.js';
 import type { Questionnaire } from './assessment/recommend.js';
 import type { EnvRef } from './environments.js';
 import { computeMetrics, type MetricSnapshot } from './metrics.js';
@@ -11,7 +11,10 @@ const MAX_SNAPSHOTS = 500;
 export async function takeSnapshot(env: EnvRef, source: MetricSnapshot['source'], jobId?: string): Promise<MetricSnapshot> {
   const scan = await scanTenant(graphFor(env));
   const s = load();
-  const q = (s.assessment[env.id] as { questionnaire?: Questionnaire } | undefined)?.questionnaire;
+  const last = s.assessment[env.id] as { questionnaire?: Questionnaire; scan?: ScanResult } | undefined;
+  const q = last?.questionnaire;
+  // La lectura por PowerShell es lenta: las mediciones reutilizan la del último Assessment
+  if (last?.scan?.probe) scan.probe = last.scan.probe;
   const snapshot: MetricSnapshot = {
     at: new Date().toISOString(),
     source,

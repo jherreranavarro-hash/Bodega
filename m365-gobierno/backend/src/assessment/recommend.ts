@@ -3,6 +3,7 @@ import type { Params, Pillar, Profile } from '../engine/types.js';
 import { PLAYBOOKS, getPlaybook } from '../playbooks/index.js';
 import { normalizeParams } from '../engine/runner.js';
 import type { ScanResult } from './scan.js';
+import { checkValue, evaluateChecks, pillarScores, type MaturityCheck } from './maturity.js';
 
 export interface Questionnaire {
   company: string;
@@ -52,7 +53,7 @@ export interface RecommendedItem {
 export interface Recommendation {
   profile: Profile;
   profileReasons: string[];
-  scores: { overall: number; pillars: Record<Pillar, number | null> };
+  scores: { overall: number; pillars: Record<Pillar, number | null>; checks: MaturityCheck[] };
   findings: Finding[];
   items: RecommendedItem[];
   roadmap: { phase: number; name: string; description: string; playbooks: string[] }[];
@@ -94,7 +95,6 @@ export function chooseProfile(q: Questionnaire): { profile: Profile; reasons: st
   return { profile, reasons };
 }
 
-type Check = { pillar: Pillar; weight: number; pass: boolean | undefined };
 
 export function recommend(
   scan: ScanResult,
@@ -106,6 +106,7 @@ export function recommend(
   const f = (id: string, severity: Severity, pillar: Pillar, title: string, detail: string, playbooks: string[]) =>
     findings.push({ id, severity, pillar, title, detail, playbooks });
   const deployed = (id: string) => deployments[id]?.status === 'ok';
+  const checks = evaluateChecks(scan, deployments, q.byod !== 'no');
 
   // ---------- Hallazgos ----------
   if (scan.license && !scan.license.businessPremium) {
@@ -158,51 +159,33 @@ export function recommend(
     const s = scan.secureScore;
     if (s.pct < 60) f('secure-score', s.pct < 40 ? 'alta' : 'media', 'defender', `Secure Score ${s.pct}% (${s.current}/${s.max})`, 'Las acciones del plan recomendado suben este puntaje.', []);
   }
-  if (!deployed('defender-safe-links') || !deployed('defender-anti-phishing')) {
-    f('email', 'alta', 'defender', 'Protección avanzada de correo por confirmar', 'Safe Links, Safe Attachments y antiphishing no se pueden leer vía Graph: se aplican con Exchange Online PowerShell.', ['defender-safe-links', 'defender-safe-attachments', 'defender-anti-phishing', 'defender-outbound-forwarding']);
+  const emailGaps = [
+    ['safe-links', 'Safe Links'],
+    ['safe-attachments', 'Safe Attachments'],
+    ['anti-phishing', 'antiphishing avanzado'],
+    ['forwarding', 'bloqueo de reenvío externo'],
+  ].filter(([id]) => (checkValue(checks, id) ?? 0) < 1);
+  if (emailGaps.length) {
+    const unknown = emailGaps.every(([id]) => checkValue(checks, id) === null);
+    f('email', unknown ? 'media' : 'alta', 'defender', unknown ? 'Protección avanzada de correo no verificable' : 'Protección avanzada de correo incompleta',
+      unknown
+        ? 'No se pudo leer Exchange Online PowerShell. Revisa "Áreas no evaluadas" o aplica los playbooks para asegurarla.'
+        : `Por reforzar: ${emailGaps.map(([, n]) => n).join(', ')}.`,
+      ['defender-safe-links', 'defender-safe-attachments', 'defender-anti-phishing', 'defender-outbound-forwarding']);
   }
   if (scan.sharepoint?.sharingCapability === 'externalUserAndGuestSharing') {
     const sens = q.sensitiveData.length > 0;
     f('anyone-links', sens ? 'alta' : 'media', 'purview', 'Enlaces anónimos "Cualquier persona" permitidos', 'Documentos pueden quedar accesibles sin iniciar sesión.', ['spo-sharing']);
   }
-  if (q.sensitiveData.length && (!deployed('purview-dlp') || !deployed('purview-labels'))) {
-    f('data', q.frameworks.includes('ley21719') ? 'alta' : 'media', 'purview', 'Datos sensibles sin clasificar ni proteger', `Declaraste manejar: ${q.sensitiveData.join(', ')}. ${q.frameworks.includes('ley21719') ? 'La Ley 21.719 exige medidas de seguridad proporcionales y trazabilidad.' : ''}`, ['purview-labels', 'purview-dlp', 'purview-retention']);
+  if (q.sensitiveData.length && ((checkValue(checks, 'dlp') ?? 0) < 1 || (checkValue(checks, 'labels') ?? 0) < 1)) {
+    f('data', q.frameworks.includes('ley21719') ? 'alta' : 'media', 'purview', (checkValue(checks, 'dlp') ?? 0) > 0 ? 'Protección de datos sensibles incompleta' : 'Datos sensibles sin clasificar ni proteger', `Declaraste manejar: ${q.sensitiveData.join(', ')}. DLP: ${checks.find((c) => c.id === 'dlp')?.detail ?? 'no evaluado'}. Etiquetas: ${checks.find((c) => c.id === 'labels')?.detail ?? 'no evaluado'}. ${q.frameworks.includes('ley21719') ? 'La Ley 21.719 exige medidas de seguridad proporcionales y trazabilidad.' : ''}`, ['purview-labels', 'purview-dlp', 'purview-retention']);
   }
-  if (!deployed('purview-audit')) {
-    f('audit', 'media', 'purview', 'Auditoría unificada por confirmar', 'Sin auditoría no es posible investigar un incidente.', ['purview-audit']);
+  if ((checkValue(checks, 'audit') ?? 0) < 1) {
+    f('audit', checkValue(checks, 'audit') === 0 ? 'alta' : 'media', 'purview', checkValue(checks, 'audit') === 0 ? 'Auditoría unificada desactivada' : 'Auditoría unificada por confirmar', 'Sin auditoría no es posible investigar un incidente.', ['purview-audit']);
   }
 
   // ---------- Puntajes ----------
-  const checks: Check[] = [
-    { pillar: 'entra', weight: 30, pass: hasMfa },
-    { pillar: 'entra', weight: 15, pass: scan.ca ? scan.ca.blocksLegacy || scan.securityDefaults : undefined },
-    { pillar: 'entra', weight: 10, pass: scan.globalAdmins !== undefined ? scan.globalAdmins >= 2 && scan.globalAdmins <= 4 : undefined },
-    { pillar: 'entra', weight: 20, pass: scan.mfa ? scan.mfa.pct >= 90 : undefined },
-    { pillar: 'entra', weight: 10, pass: scan.authorization ? !scan.authorization.legacyConsent : undefined },
-    { pillar: 'entra', weight: 5, pass: scan.authorization ? !scan.authorization.usersCanCreateApps : undefined },
-    { pillar: 'entra', weight: 5, pass: scan.authMethods ? scan.authMethods.Sms !== 'enabled' : undefined },
-    { pillar: 'entra', weight: 5, pass: scan.namedLocations !== undefined ? scan.namedLocations > 0 : undefined },
-    { pillar: 'intune', weight: 20, pass: scan.devices ? scan.devices.total > 0 : undefined },
-    { pillar: 'intune', weight: 25, pass: scan.intune ? scan.intune.compliancePolicies > 0 : undefined },
-    { pillar: 'intune', weight: 20, pass: scan.devices?.total ? scan.devices.compliant / scan.devices.total >= 0.9 : undefined },
-    { pillar: 'intune', weight: 20, pass: scan.devices?.total ? scan.devices.encrypted / scan.devices.total >= 0.95 : undefined },
-    { pillar: 'intune', weight: 15, pass: scan.intune ? scan.intune.appProtection > 0 || q.byod === 'no' : undefined },
-    { pillar: 'defender', weight: 40, pass: scan.secureScore ? scan.secureScore.pct >= 60 : undefined },
-    { pillar: 'defender', weight: 15, pass: deployed('defender-safe-links') },
-    { pillar: 'defender', weight: 15, pass: deployed('defender-safe-attachments') },
-    { pillar: 'defender', weight: 15, pass: deployed('defender-anti-phishing') },
-    { pillar: 'defender', weight: 15, pass: deployed('defender-av') },
-    { pillar: 'purview', weight: 25, pass: scan.sharepoint ? scan.sharepoint.sharingCapability !== 'externalUserAndGuestSharing' : undefined },
-    { pillar: 'purview', weight: 25, pass: deployed('purview-audit') },
-    { pillar: 'purview', weight: 25, pass: deployed('purview-labels') },
-    { pillar: 'purview', weight: 25, pass: deployed('purview-dlp') },
-  ];
-  const pillars: Record<Pillar, number | null> = { entra: null, intune: null, defender: null, purview: null };
-  for (const p of Object.keys(pillars) as Pillar[]) {
-    const evaluated = checks.filter((c) => c.pillar === p && c.pass !== undefined);
-    const total = evaluated.reduce((a, c) => a + c.weight, 0);
-    pillars[p] = total ? Math.round((evaluated.filter((c) => c.pass).reduce((a, c) => a + c.weight, 0) / total) * 100) : null;
-  }
+  const pillars = pillarScores(checks);
   const valid = Object.values(pillars).filter((v): v is number => v !== null);
   const overall = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : 0;
 
@@ -277,7 +260,7 @@ export function recommend(
   return {
     profile,
     profileReasons,
-    scores: { overall, pillars },
+    scores: { overall, pillars, checks },
     findings,
     items,
     roadmap: PHASES.map((ph) => ({ ...ph, playbooks: items.filter((i) => i.phase === ph.phase).map((i) => i.playbookId) })),

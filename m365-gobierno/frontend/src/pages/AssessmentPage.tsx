@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { useApp } from '../store';
-import { PILLARS, type Assessment, type Profile, type Questionnaire } from '../types';
+import { PILLARS, type Assessment, type Pillar, type Profile, type Questionnaire } from '../types';
+import { MaturityBreakdown } from '../components/MaturityBreakdown';
+import { TenantData } from '../components/TenantData';
 
 const INDUSTRIES = [
   ['retail', 'Retail / comercio'],
@@ -59,6 +61,7 @@ export function AssessmentPage({ goto }: { goto: (p: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [upToPhase, setUpToPhase] = useState(4);
+  const [pillarTab, setPillarTab] = useState<Pillar | undefined>(undefined);
 
   const run = async () => {
     setBusy(true);
@@ -205,18 +208,22 @@ export function AssessmentPage({ goto }: { goto: (p: string) => void }) {
                   {PILLARS.map((p) => {
                     const v = rec.scores.pillars[p.id];
                     return (
-                      <div key={p.id} className="pbar">
+                      <button key={p.id} className="pbar" onClick={() => setPillarTab(p.id)} title="Ver cómo se calcula">
                         <span>{p.label}</span>
                         <div className="bar">
                           <i style={{ width: `${v ?? 0}%`, background: p.color }} />
                         </div>
                         <b>{v === null ? 'n/e' : `${v}%`}</b>
-                      </div>
+                      </button>
                     );
                   })}
-                  <p className="muted small">Evaluado el {new Date(prev!.at).toLocaleString('es-CL')} · n/e = no evaluable con los permisos actuales</p>
+                  <p className="muted small">
+                    Evaluado el {new Date(prev!.at).toLocaleString('es-CL')} · Haz clic en un módulo para ver cómo se calcula · n/e = no evaluable
+                  </p>
                 </div>
               </div>
+
+              {rec.scores.checks && <MaturityBreakdown key={pillarTab ?? 'x'} checks={rec.scores.checks} pillars={rec.scores.pillars} initial={pillarTab} />}
 
               <div className="card profile-card">
                 <h2>
@@ -251,6 +258,8 @@ export function AssessmentPage({ goto }: { goto: (p: string) => void }) {
                   <b>Áreas no evaluadas:</b> {scan.errors.map((e: any) => `${e.area} (${e.message})`).join(' · ')}
                 </div>
               )}
+
+              <TenantData a={prev!} />
 
               <div className="card">
                 <h2>Hallazgos ({rec.findings.length})</h2>

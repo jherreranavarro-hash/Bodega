@@ -35,3 +35,31 @@ describe('assessment', () => {
     ).toBe('estricto');
   });
 });
+
+describe('madurez basada en el estado real del tenant', () => {
+  it('reconoce DLP y protección de correo existentes aunque no las haya desplegado la app', async () => {
+    const { simulatedProbe } = await import('../src/assessment/probe.js');
+    const scan = await scanTenant(new SimulatedGraph(undefined, demoTenant), { probe: async () => simulatedProbe() });
+    const rec = recommend(scan, DEFAULT_QUESTIONNAIRE, {});
+    const dlp = rec.scores.checks.find((c) => c.id === 'dlp')!;
+    expect(dlp.value).toBe(1);
+    expect(dlp.source).toBe('Tenant · Purview PowerShell');
+    expect(dlp.detail).toContain('Datos financieros Chile (aplicada)');
+    expect(rec.scores.checks.find((c) => c.id === 'safe-links')!.value).toBe(0.5);
+    expect(rec.scores.checks.find((c) => c.id === 'audit')!.value).toBe(1);
+    expect(rec.scores.pillars.purview).toBeGreaterThan(0);
+    expect(rec.scores.pillars.defender).toBeGreaterThan(0);
+    expect(scan.secureScore?.categories?.Data.pct).toBe(40);
+    expect(rec.findings.find((f) => f.id === 'audit')).toBeUndefined();
+  });
+
+  it('si PowerShell no se puede leer, lo marca como no evaluado en vez de 0%', async () => {
+    const scan = await scanTenant(new SimulatedGraph(undefined, demoTenant), {
+      probe: async () => ({ at: '', errors: [{ area: 'Purview', message: 'pwsh no instalado' }] }),
+    });
+    const rec = recommend(scan, DEFAULT_QUESTIONNAIRE, {});
+    expect(rec.scores.checks.find((c) => c.id === 'dlp')!.value).toBeNull();
+    // Solo cuentan los criterios evaluables (sharing + Secure Score Datos)
+    expect(rec.scores.pillars.purview).not.toBeNull();
+  });
+});

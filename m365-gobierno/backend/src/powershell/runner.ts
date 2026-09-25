@@ -8,17 +8,33 @@ export type PsKind = 'exo' | 'ipps';
 
 export class PowerShellUnavailableError extends Error {}
 
-let available: boolean | undefined;
+let resolved: string | null | undefined;
 
-export async function pwshAvailable(): Promise<boolean> {
-  if (available !== undefined) return available;
-  available = await new Promise<boolean>((resolve) => {
-    const p = spawn(config.pwshPath, ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'], { stdio: 'ignore' });
+function tryExe(exe: string): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const p = spawn(exe, ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'], { stdio: 'ignore' });
     p.on('error', () => resolve(false));
     p.on('exit', (code) => resolve(code === 0));
     setTimeout(() => resolve(false), 15000).unref();
   });
-  return available;
+}
+
+/** PowerShell 7 (pwsh) si existe; en Windows cae a Windows PowerShell 5.1, que también soporta el módulo de Exchange. */
+export async function powershellExe(): Promise<string | null> {
+  if (resolved !== undefined) return resolved;
+  const candidates = [config.pwshPath, ...(process.platform === 'win32' ? ['powershell.exe'] : [])];
+  resolved = null;
+  for (const exe of candidates) {
+    if (await tryExe(exe)) {
+      resolved = exe;
+      break;
+    }
+  }
+  return resolved;
+}
+
+export async function pwshAvailable(): Promise<boolean> {
+  return (await powershellExe()) !== null;
 }
 
 const MODULE = 'ExchangeOnlineManagement';
@@ -43,7 +59,11 @@ ${cmd} -AppId $env:GOB_CLIENT_ID -CertificateFilePath $env:GOB_CERT_PFX -Certifi
   return `# Generado por Gobierno M365 (${kind === 'exo' ? 'Exchange Online' : 'Microsoft Purview'}) — idempotente, se puede re-ejecutar.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-if (-not (Get-Module -ListAvailable -Name ${MODULE})) { Install-Module ${MODULE} -Scope CurrentUser -Force }
+if (-not (Get-Module -ListAvailable -Name ${MODULE})) {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  if (-not (Get-PackageProvider -ListAvailable -Name NuGet -ErrorAction SilentlyContinue)) { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null }
+  Install-Module ${MODULE} -Scope CurrentUser -Force -AllowClobber
+}
 Import-Module ${MODULE}
 ${connect}
 try {
@@ -62,8 +82,9 @@ export async function runPowerShell(kind: PsKind, body: string, auth: Exclude<Ps
     throw new PowerShellUnavailableError('Falta CERT_PFX_PATH: Exchange Online y Purview solo admiten autenticación de aplicación con certificado.');
   }
   if (!auth.organization) throw new PowerShellUnavailableError('No se conoce el dominio inicial del tenant (indícalo en el ambiente).');
-  if (!(await pwshAvailable())) {
-    throw new PowerShellUnavailableError(`PowerShell 7 (${config.pwshPath}) no está instalado en el servidor.`);
+  const exe = await powershellExe();
+  if (!exe) {
+    throw new PowerShellUnavailableError(`PowerShell (${config.pwshPath}) no está instalado en el servidor.`);
   }
   const dir = path.join(config.dataDir, 'tmp');
   fs.mkdirSync(dir, { recursive: true });
@@ -77,7 +98,7 @@ export async function runPowerShell(kind: PsKind, body: string, auth: Exclude<Ps
     return await new Promise<string[]>((resolve, reject) => {
       const out: string[] = [];
       const err: string[] = [];
-      const child = spawn(config.pwshPath, ['-NoProfile', '-NonInteractive', '-File', file], {
+      const child = spawn(exe, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file], {
         env: { ...process.env, ...secrets, GOB_ORG: auth.organization },
       });
       const timer = setTimeout(() => child.kill('SIGKILL'), 15 * 60 * 1000);

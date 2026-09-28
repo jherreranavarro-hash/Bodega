@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { buildEpisodes } from '../podcast/episodes';
+import { playLines, spanishVoices } from '../podcast/speech';
 import { api, getToken, openDocument } from '../api';
 import { useApp } from '../store';
 import { ENGINE_LABEL, pillarLabel, type ItemResult, type Params, type Playbook } from '../types';
@@ -222,8 +224,24 @@ export function TileModal() {
     return () => window.removeEventListener('keydown', onKey);
   }, [app]);
 
+  const episodes = useMemo(() => buildEpisodes(app.catalog), [app.catalog]);
+  const [speaking, setSpeaking] = useState(false);
+  const stopRef = useRef<() => void>(() => {});
+  useEffect(() => () => stopRef.current(), [app.openTileId]);
+
   if (!tile) return null;
   const pbs = app.playbooksForTile(tile.id);
+  const tileLines = episodes.flatMap((e) => e.lines).filter((l) => l.tileId === tile.id);
+  const listen = () => {
+    if (speaking) {
+      stopRef.current();
+      setSpeaking(false);
+      return;
+    }
+    const v = spanishVoices();
+    setSpeaking(true);
+    stopRef.current = playLines(tileLines, 0, { voices: { A: v[0], B: v[1] ?? v[0] }, rate: 1, onLine: () => {}, onEnd: () => setSpeaking(false) });
+  };
   const findings = app.state.assessment?.recommendation.findings.filter((f) => f.playbooks.some((p) => pbs.some((x) => x.id === p))) ?? [];
 
   return (
@@ -236,9 +254,16 @@ export function TileModal() {
             </div>
             <h2 id="tile-title">{tile.name}</h2>
           </div>
+          <div className="modal-head-actions">
+          {'speechSynthesis' in window && tileLines.length > 0 && (
+            <button className="listen" onClick={listen}>
+              {speaking ? '⏹ Detener' : '🎧 Escuchar explicación'}
+            </button>
+          )}
           <button className="close" onClick={() => app.openTile(null)} aria-label="Cerrar">
             ✕
           </button>
+          </div>
         </header>
         <div className="modal-body">
           <p className="lead">{tile.description}</p>

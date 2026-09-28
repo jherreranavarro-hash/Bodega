@@ -11,6 +11,7 @@ import { JobMonitor } from './components/JobMonitor';
 import { EnvSwitcher } from './components/EnvSwitcher';
 import { MetricsPage } from './pages/MetricsPage';
 import { DocumentsPage } from './pages/DocumentsPage';
+import { PodcastPage } from './pages/PodcastPage';
 
 const PAGES = [
   ['map', 'Mapa'],
@@ -18,6 +19,7 @@ const PAGES = [
   ['plan', 'Plan de despliegue'],
   ['metrics', 'Métricas'],
   ['documents', 'Documentos'],
+  ['podcast', 'Podcast'],
   ['history', 'Historial'],
   ['connection', 'Conexión'],
 ] as const;
@@ -98,6 +100,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         {page === 'plan' && <PlanPage goto={goto} />}
         {page === 'metrics' && <MetricsPage />}
         {page === 'documents' && <DocumentsPage goto={goto} />}
+        {page === 'podcast' && <PodcastPage />}
         {page === 'history' && <HistoryPage />}
         {page === 'connection' && <ConnectionPage />}
       </main>

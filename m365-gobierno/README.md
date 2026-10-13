@@ -85,7 +85,7 @@ Requisitos: Node.js 20+. Para Exchange/Purview: PowerShell 7 (`pwsh`) en el serv
 
 ```bash
 ./iniciar.sh            # macOS / Linux
-./iniciar.ps1           # Windows (PowerShell)
+iniciar.bat             # Windows: doble clic (o: powershell -ExecutionPolicy Bypass -File .\iniciar.ps1)
 ```
 
 Abre http://localhost:4100. Sin ambientes conectados trabaja en **modo simulación** contra un tenant

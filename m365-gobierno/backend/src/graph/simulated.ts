@@ -33,6 +33,8 @@ function deepMerge(target: any, src: any): any {
 
 function applyFilter(items: any[], filter: string | null): any[] {
   if (!filter) return items;
+  const b = filter.match(/^(\w+) eq (true|false)$/);
+  if (b) return items.filter((i) => (i?.[b[1]] === true) === (b[2] === 'true'));
   const m = filter.match(/^(\w+) eq '((?:[^']|'')*)'$/);
   if (!m) return items;
   const [, prop, raw] = m;
@@ -76,6 +78,7 @@ export class SimulatedGraph implements GraphLike {
   async get<T>(p: string, _opts?: RequestOptions): Promise<T> {
     const { key, query } = normalize(p);
     this.calls.push({ method: 'GET', path: p });
+    if (key.endsWith('/members/$count')) return (this.store[key.replace(/\/\$count$/, '/$ref')] ?? []).length as T;
     const refs = this.store[`${key}/$ref`];
     if (key.endsWith('/members') && Array.isArray(refs)) {
       const ids = refs.map((r: any) => String(r['@odata.id']).split('/').pop());
@@ -100,6 +103,9 @@ export class SimulatedGraph implements GraphLike {
     this.calls.push({ method: 'POST', path: p, body });
     const last = key.split('/').pop() ?? '';
     if (ACTIONS.has(last)) {
+      if (key.endsWith('/members/$ref') && this.hasRef(key, body?.['@odata.id'])) {
+        throw new GraphError(400, 'Request_BadRequest', 'One or more added object references already exist for the following modified properties: \'members\'.', p);
+      }
       (this.store[key] ??= []).push(body);
       this.persist();
       return {} as T;
@@ -111,9 +117,26 @@ export class SimulatedGraph implements GraphLike {
     return structuredClone(item);
   }
 
+  private hasRef(refKey: string, odataId: unknown): boolean {
+    const id = String(odataId ?? '').split('/').pop();
+    return (this.store[refKey] ?? []).some((r: any) => String(r['@odata.id']).split('/').pop() === id);
+  }
+
   private write(p: string, body: any, replace: boolean) {
     const { key } = normalize(p);
     this.calls.push({ method: replace ? 'PUT' : 'PATCH', path: p, body });
+    const binds = body?.['members@odata.bind'];
+    if (Array.isArray(binds)) {
+      // Como Graph: el lote completo falla si alguna referencia ya existe
+      const refKey = `${key}/members/$ref`;
+      if (binds.some((b) => this.hasRef(refKey, b))) {
+        throw new GraphError(400, 'Request_BadRequest', 'One or more added object references already exist for the following modified properties: \'members\'.', p);
+      }
+      (this.store[refKey] ??= []).push(...binds.map((b) => ({ '@odata.id': b })));
+      const { ['members@odata.bind']: _b, ...rest } = body;
+      body = rest;
+      if (!Object.keys(body).length) return this.persist();
+    }
     const current = this.store[key];
     if (isPlainObject(current)) {
       this.store[key] = replace ? body : deepMerge(current, body);
@@ -142,6 +165,14 @@ export class SimulatedGraph implements GraphLike {
   async delete(p: string) {
     const { key } = normalize(p);
     this.calls.push({ method: 'DELETE', path: p });
+    const ref = key.match(/^(.*\/members)\/([^/]+)\/\$ref$/);
+    if (ref) {
+      const refs: any[] = this.store[`${ref[1]}/$ref`] ?? [];
+      const i = refs.findIndex((r) => String(r['@odata.id']).split('/').pop()?.toLowerCase() === ref[2]);
+      if (i < 0) throw new GraphError(404, 'Request_ResourceNotFound', `No existe ${p}`, p);
+      refs.splice(i, 1);
+      return this.persist();
+    }
     const { collection, item } = this.locate(key);
     if (collection && item) collection.splice(collection.indexOf(item), 1);
     this.persist();
@@ -154,6 +185,7 @@ export function demoTenant(): Store {
     id: `u${i}`,
     displayName: `Usuario ${i + 1}`,
     userPrincipalName: `usuario${i + 1}@contoso-demo.cl`,
+    mail: `usuario${i + 1}@contoso-demo.cl`,
     userType: i < 42 ? 'Member' : 'Guest',
     accountEnabled: i !== 3 && i !== 17,
     // u5 y u11 simulan buzones compartidos (sin licencia); los invitados no tienen licencia
@@ -195,7 +227,7 @@ export function demoTenant(): Store {
       },
     ],
     '/subscribedskus': [
-      { skuPartNumber: 'SPB', prepaidUnits: { enabled: 50 }, consumedUnits: 42 },
+      { skuId: 'spb', skuPartNumber: 'SPB', prepaidUnits: { enabled: 50 }, consumedUnits: 42 },
       { skuPartNumber: 'FLOW_FREE', prepaidUnits: { enabled: 10000 }, consumedUnits: 3 },
     ],
     '/users': users,
@@ -275,7 +307,8 @@ export function demoTenant(): Store {
       { id: 'scid_2010', title: 'Turn on Microsoft Defender Antivirus', maxScore: 10, controlCategory: 'Device', service: 'MDATP' },
     ],
     '/admin/sharepoint/settings': { sharingCapability: 'externalUserAndGuestSharing', isResharingByExternalUsersEnabled: true },
-    '/groups': [],
+    '/groups': demoGroups(),
+    ...demoGroupMembers(),
     '/grouplifecyclepolicies': [],
     '/settings': [],
     '/groupsettingtemplates': [
@@ -283,5 +316,36 @@ export function demoTenant(): Store {
       { id: '62375ab9-6b52-47ed-826b-58e47e0e304b', displayName: 'Group.Unified' },
     ],
     '/directory/administrativeunits': [],
+  };
+}
+
+/** Grupos de ejemplo: uno de cada tipo, para recorrer la vista de grupos y la asignación masiva. */
+function demoGroups() {
+  const at = '2025-03-01T12:00:00Z';
+  const base = { mailEnabled: false, securityEnabled: true, groupTypes: [] as string[], createdDateTime: at };
+  return [
+    { ...base, id: 'g-fin', displayName: 'SG-Finanzas', description: 'Acceso a carpetas y aplicaciones de Finanzas', mailNickname: 'sg-finanzas' },
+    { ...base, id: 'g-ven', displayName: 'SG-Ventas', description: 'Acceso al CRM y a la carpeta comercial', mailNickname: 'sg-ventas' },
+    { ...base, id: 'g-lic', displayName: 'LIC-BusinessPremium', description: 'Licenciamiento por grupo de Microsoft 365 Business Premium', mailNickname: 'lic-bp', assignedLicenses: [{ skuId: 'spb' }] },
+    { ...base, id: 'g-dyn', displayName: 'DYN-Colaboradores', description: 'Todos los colaboradores (regla dinámica)', mailNickname: 'dyn-colab', groupTypes: ['DynamicMembership'], membershipRule: '(user.userType -eq "Member") and (user.accountEnabled -eq true)', membershipRuleProcessingState: 'On' },
+    { ...base, id: 'g-m365', displayName: 'Proyecto Andes', description: 'Equipo de Teams del proyecto', mailNickname: 'proyecto.andes', mail: 'proyecto.andes@contoso-demo.cl', mailEnabled: true, groupTypes: ['Unified'] },
+    { ...base, id: 'g-mail', displayName: 'Seguridad TI (con correo)', mailNickname: 'seguridad.ti', mail: 'seguridad.ti@contoso-demo.cl', mailEnabled: true },
+    { ...base, id: 'g-ad', displayName: 'AD-Contabilidad', description: 'Sincronizado con Entra Connect', mailNickname: 'ad-contabilidad', onPremisesSyncEnabled: true },
+    { ...base, id: 'g-rol', displayName: 'ROL-MesaDeAyuda', description: 'Asignado al rol Administrador del departamento de soporte técnico', mailNickname: 'rol-mesa', isAssignableToRole: true },
+    { ...base, id: 'g-dl', displayName: 'Todos (lista de distribución)', mailNickname: 'todos', mail: 'todos@contoso-demo.cl', mailEnabled: true, securityEnabled: false },
+  ];
+}
+
+function demoGroupMembers(): Record<string, { '@odata.id': string }[]> {
+  const refs = (ids: number[]) => ids.map((i) => ({ '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/u${i}` }));
+  const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => from + k);
+  return {
+    '/groups/g-fin/members/$ref': refs(range(6, 11)),
+    '/groups/g-ven/members/$ref': refs(range(12, 20)),
+    '/groups/g-lic/members/$ref': refs(range(0, 9)),
+    '/groups/g-dyn/members/$ref': refs(range(0, 41).filter((i) => i !== 3 && i !== 17)),
+    '/groups/g-m365/members/$ref': refs([20, 21, 22, 23, 42]),
+    '/groups/g-ad/members/$ref': refs([30, 31, 32]),
+    '/groups/g-rol/members/$ref': refs([1, 2]),
   };
 }

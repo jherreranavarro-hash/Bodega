@@ -137,7 +137,8 @@ export class GraphClient implements GraphLike {
         continue;
       }
       if (res.status === 204) return undefined as T;
-      const text = await res.text();
+      // $count responde texto plano (a veces con BOM)
+      const text = (await res.text()).replace(/^\uFEFF/, '');
       const json = text ? JSON.parse(text) : undefined;
       if (!res.ok) {
         const err = json?.error ?? {};

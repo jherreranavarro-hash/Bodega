@@ -28,6 +28,34 @@ frontend/  Aplicación web (React + Vite): mapa, fichas, assessment, plan, histo
    petición a Graph o el script PowerShell). No escribe nada.
 5. **Desplegar** — ejecuta en orden, con registro en vivo e historial trazable.
 
+## Grupos de seguridad y asignación masiva
+
+La página **Grupos** lista los grupos con seguridad habilitada del ambiente activo (seguridad
+asignados, dinámicos, Microsoft 365 con seguridad y con correo), con número de miembros,
+licencias que asignan y las políticas de Acceso Condicional que los incluyen o excluyen.
+
+- **Ver miembros** de cada grupo, buscarlos y descargarlos en CSV.
+- **Agregar o quitar cuentas en masa**: se pegan correos, UPN o id. de objeto (o se carga un
+  CSV/TXT exportado de Entra ID o Excel; se toman los correos de cualquier columna, hasta
+  2.000 por operación).
+- **Previsualizar** (solo lectura): por cada cuenta indica *se agregará*, *ya es miembro*, *no
+  encontrada* o *repetida*, y avisa si es invitado externo o está deshabilitada.
+- **Aplicar**: el servidor vuelve a validar la lista, agrega en lotes de 20
+  (`members@odata.bind`) y, si un lote falla, reintenta cuenta por cuenta para aislar el error.
+  Después relee el grupo y marca cada cuenta como verificada.
+- En **PRD** exige confirmar y escribir el nombre del ambiente; se aplica con la sesión del
+  administrador validada con MFA (permiso delegado `Group.ReadWrite.All`, ya incluido en el
+  registro de aplicación).
+- Cada cambio queda en **Historial** y genera el acta **GOB-EVD-GRP** (membresía antes →
+  después, cuentas afectadas, ISO 27001 A.5.15/A.5.18 y Ley 21.719, huella SHA-256).
+  *Preparar reversión* carga la operación inversa con las mismas cuentas.
+
+Solo lectura, por diseño: grupos **dinámicos** (los define su regla), **sincronizados desde AD**
+(se cambian en el AD local), de **seguridad con correo** (Graph no los modifica: Exchange) y
+**asignables a roles de Entra** (dan privilegios de administrador: se gestionan con PIM). Si
+el grupo está **excluido de Acceso Condicional** (p. ej. el de cuentas de emergencia), agregar
+cuentas exige aceptar el riesgo explícitamente, porque esas cuentas quedan fuera de MFA.
+
 ## Gobierno documental, evidencia y métricas
 
 **Documentos formales** (página *Documentos*; se abren listos para imprimir/guardar como PDF,
@@ -39,6 +67,7 @@ con tabla de aprobaciones para firma):
 | GOB-POL-IAM / END / THR / DAT | Política por módulo (Entra ID, Intune, Defender, Purview) | Objetivo, alcance, referencias normativas, roles, declaraciones con los valores configurados, excepciones, revisión |
 | GOB-PRC-&lt;acción&gt; | Procedimiento de ejecución por playbook | Justificación, configuración, impacto, prerrequisitos, pasos DEV→POC→PRD, criterios de aceptación, plan de reversa, controles |
 | GOB-EVD-&lt;id&gt; | Acta de evidencia de despliegue | Por cada recurso modificado: **cómo estaba y cómo quedó**, métricas antes/después, controles ISO 27001 y deberes de la Ley 21.719; huella **SHA-256** que detecta alteraciones |
+| GOB-EVD-GRP-&lt;id&gt; | Acta de cambio de membresía de grupo | Cuentas agregadas o quitadas, resultado por cuenta, membresía antes → después, quién lo autorizó (con MFA); huella **SHA-256** |
 
 **Evidencia:** cada despliegue lee cada recurso antes y después de escribirlo (Graph) o
 registra el script y su salida (PowerShell). Se guarda en `backend/data/evidencia/<id>.json`

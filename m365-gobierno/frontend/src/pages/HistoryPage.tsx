@@ -25,7 +25,7 @@ export function HistoryPage() {
   return (
     <div className="page">
       <h1>Historial de despliegues</h1>
-      <p className="muted">Trazabilidad de cada ejecución: qué se creó o actualizó, en qué modo y con qué resultado.</p>
+      <p className="muted">Trazabilidad de cada ejecución (despliegues de playbooks y cambios de membresía de grupos): qué se creó o actualizó, en qué modo y con qué resultado.</p>
       {jobs.length === 0 && <div className="card empty">Aún no hay despliegues.</div>}
       {jobs.map((j) => (
         <div className="card job-row" key={j.id}>
@@ -36,8 +36,14 @@ export function HistoryPage() {
             {j.account && <span className="small">por {j.account}</span>}
             <span>{STATUS_LABEL[j.status]}</span>
             <span className="muted small">
-              {j.items.length} playbooks: {j.items.slice(0, 3).map((i) => i.title).join(', ')}
-              {j.items.length > 3 ? '…' : ''}
+              {j.kind === 'grupos' ? (
+                <>Grupos · {j.items[0]?.title}</>
+              ) : (
+                <>
+                  {j.items.length} playbooks: {j.items.slice(0, 3).map((i) => i.title).join(', ')}
+                  {j.items.length > 3 ? '…' : ''}
+                </>
+              )}
             </span>
           </button>
           {open?.id === j.id && (
@@ -45,7 +51,7 @@ export function HistoryPage() {
               {open.evidenceHash && (
                 <p className="small">
                   <button className="btn" onClick={() => openDocument(`/docs/evidence/${open.id}`)}>
-                    Acta de evidencia (antes / después)
+                    {open.kind === 'grupos' ? 'Acta de cambio de membresía' : 'Acta de evidencia (antes / después)'}
                   </button>{' '}
                   <span className="muted">SHA-256 {open.evidenceHash.slice(0, 16)}…</span>
                 </p>

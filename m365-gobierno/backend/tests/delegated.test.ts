@@ -119,6 +119,11 @@ describe('ambientes e inicio de sesión del administrador', () => {
     const r1 = await request(app).post('/api/deploy').set(auth()).send({ items, confirm: true });
     expect(r1.status).toBe(400);
     expect(r1.body.error).toMatch(/escribe "PRD"/);
+    const g = await request(app).post('/api/groups/11111111-2222-3333-4444-555555555555/members/apply').set(auth()).send({ accounts: 'a@contoso.cl', confirm: true });
+    expect(g.status).toBe(400);
+    expect(g.body.error).toMatch(/escribe "PRD" para confirmar el cambio de membresía/);
+    const unconfirmed = await request(app).post('/api/groups/11111111-2222-3333-4444-555555555555/members/apply').set(auth()).send({ accounts: 'a@contoso.cl' });
+    expect(unconfirmed.body.error).toMatch(/Confirma explícitamente/);
   });
 
   it('sin sesión el ambiente pide iniciar sesión (403, no cierra la sesión de la app)', async () => {

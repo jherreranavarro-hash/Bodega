@@ -88,6 +88,8 @@ export interface ItemResult {
 
 export interface Job {
   id: string;
+  /** 'grupos' = cambio de membresía; sin valor = despliegue de playbooks. */
+  kind?: 'grupos';
   mode: 'simulacion' | 'real';
   envId?: string;
   envName?: string;
@@ -236,3 +238,76 @@ export interface MaturityCheck {
   detail: string;
   source: string | null;
 }
+
+// ---------- Grupos de seguridad ----------
+export type GroupKind = 'asignado' | 'dinamico' | 'microsoft365' | 'correo';
+export type MembershipMode = 'agregar' | 'quitar';
+
+export interface GroupView {
+  id: string;
+  displayName: string;
+  description?: string;
+  mail?: string;
+  kind: GroupKind;
+  roleAssignable: boolean;
+  synced: boolean;
+  membershipRule?: string;
+  members: number | null;
+  licenses: string[];
+  conditionalAccess: { include: string[]; exclude: string[] };
+  createdDateTime?: string;
+  managedByApp: boolean;
+  editable: boolean;
+  blockedReason?: string;
+  warnings: string[];
+}
+
+export interface GroupMember {
+  id: string;
+  type: string;
+  displayName?: string;
+  userPrincipalName?: string;
+  mail?: string;
+  userType?: string;
+  accountEnabled?: boolean;
+}
+
+export type EntryStatus = 'agregar' | 'ya-miembro' | 'quitar' | 'no-miembro' | 'no-encontrado' | 'duplicado';
+
+export interface MembershipPreview {
+  group: GroupView;
+  mode: MembershipMode;
+  entries: { input: string; status: EntryStatus; user?: GroupMember; notes: string[] }[];
+  ignored: string[];
+  counts: Record<EntryStatus, number>;
+  memberCount: number;
+}
+
+export interface MembershipChange {
+  input: string;
+  userId: string;
+  upn: string;
+  displayName?: string;
+  status: 'agregado' | 'quitado' | 'error';
+  error?: string;
+  verified: boolean;
+}
+
+export interface MembershipResult {
+  jobId: string;
+  evidenceHash: string;
+  status: Job['status'];
+  mode: MembershipMode;
+  group: GroupView;
+  counts: Record<EntryStatus, number>;
+  changes: MembershipChange[];
+  before: number;
+  after: number;
+}
+
+export const GROUP_KIND_LABEL: Record<GroupKind, string> = {
+  asignado: 'Seguridad',
+  dinamico: 'Dinámico',
+  microsoft365: 'Microsoft 365',
+  correo: 'Con correo',
+};

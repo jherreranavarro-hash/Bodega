@@ -25,12 +25,13 @@ import { forgetTenant, graphFor, grantedRoles, psRunner, simulatedGraph, tenantI
 import { buildScript, pwshAvailable } from './powershell/runner.js';
 import { scanTenant } from './assessment/scan.js';
 import { DEFAULT_QUESTIONNAIRE, PHASES, recommend, type Questionnaire, type Recommendation } from './assessment/recommend.js';
-import { renderEvidence, renderPillarPolicy, renderPlaybookProcedure, renderRoadmap, type DocContext } from './docs/render.js';
+import { renderEvidence, renderGroupEvidence, renderPillarPolicy, renderPlaybookProcedure, renderRoadmap, type DocContext } from './docs/render.js';
 import { METRIC_DEFS, computeMetrics } from './metrics.js';
 import { recordSnapshot, snapshotsOf, takeSnapshot } from './snapshots.js';
 import { runProbes, simulatedProbe } from './assessment/probe.js';
 import { loadEvidence } from './store.js';
 import type { Pillar } from './engine/types.js';
+import { applyMembership, getSecurityGroup, listMembers, listSecurityGroups, previewMembership, recordMembershipJob, type MembershipMode } from './groups.js';
 
 const wrap =
   (fn: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) =>
@@ -100,6 +101,15 @@ function probeFor(env: EnvRef) {
 }
 
 const signedInAccountOf = (env: EnvRef) => (env.kind === 'delegado' ? signedInAccount(env.id) : undefined);
+
+/** Toda escritura en un tenant real exige confirmación; producción, además, escribir el nombre del ambiente. */
+function confirmationError(env: EnvRef, body: any, what = 'el despliegue'): string | undefined {
+  if (env.kind !== 'simulacion' && body?.confirm !== true) return `Confirma explícitamente ${what} en ${env.name}`;
+  if (env.tier === 'prd' && String(body?.confirmText ?? '').trim() !== env.name) return `Producción: escribe "${env.name}" para confirmar ${what}`;
+  return undefined;
+}
+
+const membershipMode = (body: any): MembershipMode => (body?.mode === 'quitar' ? 'quitar' : 'agregar');
 
 export function createApp() {
   const app = express();
@@ -271,12 +281,8 @@ export function createApp() {
     '/api/deploy',
     wrap(async (req, res) => {
       const env = activeEnvironment();
-      if (env.kind !== 'simulacion' && req.body?.confirm !== true) {
-        return res.status(400).json({ error: `Confirma explícitamente el despliegue en ${env.name}` });
-      }
-      if (env.tier === 'prd' && String(req.body?.confirmText ?? '').trim() !== env.name) {
-        return res.status(400).json({ error: `Producción: escribe "${env.name}" para confirmar el despliegue` });
-      }
+      const notConfirmed = confirmationError(env, req.body);
+      if (notConfirmed) return res.status(400).json({ error: notConfirmed });
       if (listJobs().some((j) => j.status === 'en-curso')) {
         return res.status(409).json({ error: 'Ya hay un despliegue en curso' });
       }
@@ -371,6 +377,54 @@ export function createApp() {
     }),
   );
 
+  // ---------- Grupos de seguridad: consulta y asignación masiva ----------
+  app.get(
+    '/api/groups',
+    wrap(async (_req, res) => {
+      const env = activeEnvironment();
+      res.json({ environment: env.name, groups: await listSecurityGroups(graphFor(env)) });
+    }),
+  );
+  app.get(
+    '/api/groups/:id',
+    wrap(async (req, res) => {
+      const graph = graphFor(activeEnvironment());
+      const [group, members] = await Promise.all([getSecurityGroup(graph, req.params.id), listMembers(graph, req.params.id)]);
+      res.json({ group: { ...group, members: members.length }, members });
+    }),
+  );
+  app.post(
+    '/api/groups/:id/members/preview',
+    wrap(async (req, res) => {
+      res.json(await previewMembership(graphFor(activeEnvironment()), req.params.id, req.body?.accounts, membershipMode(req.body)));
+    }),
+  );
+  app.post(
+    '/api/groups/:id/members/apply',
+    wrap(async (req, res) => {
+      const env = activeEnvironment();
+      const mode = membershipMode(req.body);
+      const notConfirmed = confirmationError(env, req.body, 'el cambio de membresía');
+      if (notConfirmed) return res.status(400).json({ error: notConfirmed });
+      if (listJobs().some((j) => j.status === 'en-curso')) return res.status(409).json({ error: 'Espera a que termine el despliegue en curso' });
+      const startedAt = new Date().toISOString();
+      const tenant = await tenantInfo(env);
+      const out = await applyMembership(graphFor(env), req.params.id, req.body?.accounts, mode, { ackRisk: req.body?.ackRisk === true });
+      const job = recordMembershipJob(env, tenant, signedInAccountOf(env), startedAt, out);
+      res.json({
+        jobId: job.id,
+        evidenceHash: job.evidenceHash,
+        status: job.status,
+        mode,
+        group: { ...out.preview.group, members: out.after.length },
+        counts: out.preview.counts,
+        changes: out.changes,
+        before: out.before.length,
+        after: out.after.length,
+      });
+    }),
+  );
+
   // ---------- Documentos formales (HTML imprimible) ----------
   const sendDoc = (res: Response, html: string) => {
     res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'");
@@ -413,7 +467,8 @@ export function createApp() {
         res.setHeader('Content-Disposition', `attachment; filename="evidencia-${req.params.jobId}.json"`);
         return res.json({ sha256: ev.hash, integra: ev.valid, ...ev.record });
       }
-      sendDoc(res, renderEvidence(ev, await docContext(env, req.query)));
+      const ctx = await docContext(env, req.query);
+      sendDoc(res, ev.record.kind === 'grupos' ? renderGroupEvidence(ev, ctx) : renderEvidence(ev, ctx));
     }),
   );
 

@@ -12,11 +12,13 @@ import { EnvSwitcher } from './components/EnvSwitcher';
 import { MetricsPage } from './pages/MetricsPage';
 import { DocumentsPage } from './pages/DocumentsPage';
 import { PodcastPage } from './pages/PodcastPage';
+import { GroupsPage } from './pages/GroupsPage';
 
 const PAGES = [
   ['map', 'Mapa'],
   ['assessment', 'Assessment'],
   ['plan', 'Plan de despliegue'],
+  ['groups', 'Grupos'],
   ['metrics', 'Métricas'],
   ['documents', 'Documentos'],
   ['podcast', 'Podcast'],
@@ -98,6 +100,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         {page === 'map' && <MapPage goto={goto} />}
         {page === 'assessment' && <AssessmentPage goto={goto} />}
         {page === 'plan' && <PlanPage goto={goto} />}
+        {page === 'groups' && <GroupsPage />}
         {page === 'metrics' && <MetricsPage />}
         {page === 'documents' && <DocumentsPage goto={goto} />}
         {page === 'podcast' && <PodcastPage />}

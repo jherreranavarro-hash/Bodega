@@ -9,6 +9,8 @@ import { executePlan, type ItemResult, type ResolvedItem } from './runner.js';
 
 export interface Job {
   id: string;
+  /** Despliegue de playbooks (por omisión) o cambio de membresía de grupos. */
+  kind?: 'grupos';
   mode: 'simulacion' | 'real';
   envId: string;
   envName: string;
@@ -28,7 +30,7 @@ export interface Job {
   log: { at: string; msg: string }[];
 }
 
-const MAX_JOBS = 40;
+export const MAX_JOBS = 40;
 const running = new Map<string, Job>();
 export const jobEvents = new EventEmitter();
 jobEvents.setMaxListeners(100);

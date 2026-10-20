@@ -149,7 +149,7 @@ export function DocumentsPage({ goto }: { goto: (p: string) => void }) {
       <div className="card">
         <h2>Actas de evidencia de despliegue · GOB-EVD</h2>
         <p className="small">
-          Por cada despliegue: cómo estaba y cómo quedó cada configuración, métricas antes/después, controles ISO 27001 y deberes de la Ley 21.719, con
+          Por cada despliegue o cambio de membresía de grupos: cómo estaba y cómo quedó cada configuración, métricas antes/después, controles ISO 27001 y deberes de la Ley 21.719, con
           huella SHA-256 para verificar que no fue alterada.
         </p>
         {jobs.length === 0 ? (
@@ -159,8 +159,8 @@ export function DocumentsPage({ goto }: { goto: (p: string) => void }) {
             {jobs.map((j) => (
               <li key={j.id}>
                 <span>
-                  <span className={`tier t-${j.tier ?? 'sim'}`}>{TIER_LABEL[j.tier ?? 'sim']}</span> {new Date(j.createdAt).toLocaleString('es-CL')} · {j.items.length}{' '}
-                  acciones {j.account ? `· ${j.account}` : ''}
+                  <span className={`tier t-${j.tier ?? 'sim'}`}>{TIER_LABEL[j.tier ?? 'sim']}</span> {new Date(j.createdAt).toLocaleString('es-CL')} ·{' '}
+                  {j.kind === 'grupos' ? j.items[0]?.title : `${j.items.length} acciones`} {j.account ? `· ${j.account}` : ''}
                 </span>
                 <span className="doc-actions">
                   <button className="link small" onClick={() => open(`/docs/evidence/${j.id}`)}>

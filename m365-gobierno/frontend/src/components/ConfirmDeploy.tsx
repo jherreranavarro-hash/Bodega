@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { signInWithMicrosoft } from '../api';
 import { useApp } from '../store';
 import { TIER_LABEL } from '../types';
@@ -8,11 +8,16 @@ import { TIER_LABEL } from '../types';
  * advierte si algún playbook no se desplegó antes con éxito en DEV/POC.
  */
 export function ConfirmDeploy({
-  playbookIds,
+  playbookIds = [],
+  summary,
+  verb = 'Desplegar',
   onConfirm,
   onCancel,
 }: {
-  playbookIds: string[];
+  playbookIds?: string[];
+  /** Reemplaza la descripción de playbooks (ej. cambio de membresía de un grupo). */
+  summary?: ReactNode;
+  verb?: string;
   onConfirm: (confirmText: string) => void;
   onCancel: () => void;
 }) {
@@ -31,16 +36,18 @@ export function ConfirmDeploy({
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
       <div className="modal small-modal">
         <h2 id="confirm-title">
-          {sim ? 'Desplegar en el tenant simulado' : (
+          {sim ? `${verb} en el tenant simulado` : (
             <>
-              Desplegar en <span className={`tier t-${env.tier}`}>{TIER_LABEL[env.tier]}</span> {env.name}
+              {verb} en <span className={`tier t-${env.tier}`}>{TIER_LABEL[env.tier]}</span> {env.name}
             </>
           )}
         </h2>
-        <p>
-          Se ejecutarán <b>{playbookIds.length}</b> playbooks (más sus dependencias). Son idempotentes: si la configuración ya existe, solo se
-          actualiza lo que difiera.
-        </p>
+        {summary ?? (
+          <p>
+            Se ejecutarán <b>{playbookIds.length}</b> playbooks (más sus dependencias). Son idempotentes: si la configuración ya existe, solo se
+            actualiza lo que difiera.
+          </p>
+        )}
 
         {env.kind === 'delegado' && !env.connected ? (
           <div className="warn-card card small">
@@ -92,7 +99,7 @@ export function ConfirmDeploy({
             Cancelar
           </button>
           <button className="btn primary" disabled={!ready || (env.kind === 'delegado' && !env.connected)} onClick={() => onConfirm(typed.trim())}>
-            Desplegar
+            {verb}
           </button>
         </div>
       </div>

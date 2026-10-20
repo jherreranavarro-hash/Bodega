@@ -421,3 +421,99 @@ ${evs.length ? evs.map(evidenceRows).join('') : '<p class="note">Sin escrituras:
 <h2>3. Detalle de cambios (estado anterior → posterior)</h2>${items}`;
   return layout({ code: `GOB-EVD-${String(r.jobId).slice(0, 8).toUpperCase()}`, title: 'Acta de evidencia de despliegue', subtitle: `${r.environment?.name ?? ''} · ${fmtDateTime(r.finishedAt)}`, ctx, body });
 }
+
+// ---------------------------------------------------------------------------
+// 6. Acta de cambio de membresía de grupos (asignación masiva)
+// ---------------------------------------------------------------------------
+
+const KIND_LABEL: Record<string, string> = {
+  asignado: 'Seguridad (asignado)',
+  microsoft365: 'Microsoft 365 con seguridad',
+  dinamico: 'Seguridad (dinámico)',
+  correo: 'Seguridad con correo',
+};
+const SKIP_LABEL: Record<string, string> = {
+  'ya-miembro': 'Ya era miembro',
+  'no-miembro': 'No era miembro',
+  'no-encontrado': 'No existe en el directorio',
+  duplicado: 'Repetido en la lista',
+};
+
+export function renderGroupEvidence(ev: { record: any; hash: string; valid: boolean }, ctx: DocContext): string {
+  const r = ev.record;
+  const add = r.operation === 'agregar';
+  const changes: any[] = r.changes ?? [];
+  const ok = changes.filter((c) => c.status !== 'error');
+  const errors = changes.filter((c) => c.status === 'error');
+  const skipped: any[] = r.skipped ?? [];
+  const beforeIds = new Set((r.before?.members ?? []).map((m: any) => m.id));
+  const afterIds = new Set((r.after?.members ?? []).map((m: any) => m.id));
+  const diffAdded = (r.after?.members ?? []).filter((m: any) => !beforeIds.has(m.id));
+  const diffRemoved = (r.before?.members ?? []).filter((m: any) => !afterIds.has(m.id));
+  const iso = ['5.15', '5.18', ...(r.group?.conditionalAccess?.exclude?.length ? ['8.2'] : []), '5.28', '8.15', '8.32'];
+  const ca = r.group?.conditionalAccess ?? { include: [], exclude: [] };
+  const memberRows = (list: any[]) =>
+    list.length ? list.map((m) => `<tr><td>${esc(m.upn ?? m.id)}</td><td>${esc(m.displayName ?? '')}</td></tr>`).join('') : '<tr><td colspan="2">—</td></tr>';
+  const body = `
+<div class="box">Acta que deja constancia del cambio de membresía de un grupo de seguridad de Microsoft Entra ID: qué cuentas se ${add ? 'agregaron' : 'quitaron'}, quién lo autorizó y la membresía del grupo antes y después del cambio (ISO/IEC 27001:2022 A.5.18 Derechos de acceso; A.5.28 Recolección de evidencia).</div>
+<table><tr><th style="width:28%">Identificador del cambio</th><td>${esc(r.jobId)}</td></tr>
+<tr><th>Ambiente</th><td>${esc(r.environment?.name)} (${esc(String(r.environment?.tier ?? '').toUpperCase())})${r.environment?.tenantId ? ` · tenant ${esc(r.environment.tenantId)}` : ''}</td></tr>
+<tr><th>Dominio</th><td>${esc(r.tenant?.defaultDomain ?? r.tenant?.initialDomain ?? '')}</td></tr>
+<tr><th>Grupo</th><td><b>${esc(r.group?.displayName)}</b> · ${esc(KIND_LABEL[r.group?.kind] ?? r.group?.kind)}<br><code>${esc(r.group?.id)}</code>${r.group?.description ? `<br>${esc(r.group.description)}` : ''}</td></tr>
+<tr><th>Operación</th><td>${add ? 'Asignación masiva de cuentas (agregar miembros)' : 'Retiro masivo de cuentas (quitar miembros)'}</td></tr>
+<tr><th>Ejecutado por</th><td>${esc(r.account ?? '(registro de aplicación / simulación)')}${r.account ? ' · autenticado con MFA' : ''}</td></tr>
+<tr><th>Inicio / término</th><td>${fmtDateTime(r.startedAt)} → ${fmtDateTime(r.finishedAt)}</td></tr>
+<tr><th>Resultado</th><td>${esc(r.status)} · ${ok.length} de ${changes.length} cuentas ${add ? 'agregadas' : 'quitadas'}${errors.length ? ` · ${errors.length} con error` : ''}</td></tr>
+<tr><th>Integridad (SHA-256)</th><td><code>${esc(ev.hash)}</code> ${ev.valid ? '<span class="pill ok">verificada</span>' : '<span class="pill err">NO coincide: el archivo fue modificado</span>'}</td></tr></table>
+
+<h2>1. Resumen</h2>
+<div class="kpis"><div class="kpi"><b>${r.before?.count ?? 'n/e'}</b>Miembros antes</div><div class="kpi"><b>${r.after?.count ?? 'n/e'}</b>Miembros después</div><div class="kpi"><b>${ok.length}</b>${add ? 'Agregadas' : 'Quitadas'}</div><div class="kpi"><b>${errors.length + skipped.length}</b>Sin cambio / error</div></div>
+<p>Cuentas recibidas: ${esc(r.requested?.accounts ?? changes.length)}.${r.requested?.ignored?.length ? ` Textos ignorados por no ser correo ni identificador: ${r.requested.ignored.slice(0, 10).map(esc).join(', ')}${r.requested.ignored.length > 10 ? '…' : ''}.` : ''}</p>
+${r.group?.licenses?.length ? `<p class="box">El grupo asigna licencias (${r.group.licenses.map(esc).join(', ')}): las cuentas agregadas consumen licencia.</p>` : ''}
+${ca.exclude.length ? `<p class="box"><b>Riesgo aceptado:</b> el grupo está excluido de ${ca.exclude.map(esc).join('; ')}. El ejecutor confirmó explícitamente que las cuentas agregadas quedan fuera de esas políticas.</p>` : ''}
+${ca.include.length ? `<p>Políticas de Acceso Condicional que aplican al grupo: ${ca.include.map(esc).join('; ')}.</p>` : ''}
+
+<h2>2. Controles y obligaciones cubiertos</h2>
+<table><tr><th style="width:9%">Control</th><th style="width:40%">Nombre</th><th>Cómo lo cubre este cambio</th></tr>
+${iso
+  .map((id) => {
+    const how: Record<string, string> = {
+      '5.15': 'Acceso a recursos otorgado por pertenencia a grupo, no por asignación individual.',
+      '5.18': `Alta/baja de derechos de acceso registrada con solicitante, fecha y cuentas afectadas.`,
+      '8.2': 'Cambio sobre un grupo excluido de Acceso Condicional (acceso privilegiado/excepción) con aceptación explícita del riesgo.',
+      '5.28': 'Evidencia inmutable con huella SHA-256 del estado anterior y posterior.',
+      '8.15': 'Queda además en el registro de auditoría de Entra ID (Auditoría → Agregar miembro a grupo).',
+      '8.32': `Cambio confirmado ${String(r.environment?.tier) === 'prd' ? 'escribiendo el nombre del ambiente de producción' : 'explícitamente'} tras una previsualización.`,
+    };
+    return `<tr><td>A.${esc(id)}</td><td>${esc(ISO_CONTROLS[id])}</td><td>${esc(how[id])}</td></tr>`;
+  })
+  .join('')}</table>
+<h3>${esc(LAW_NAME)}</h3>
+<table><tr><th style="width:45%">Principio / deber</th><th>Contribución</th></tr>
+<tr><td>${esc(LAW_DUTIES.seguridad)}</td><td>Acceso a datos personales limitado a los integrantes autorizados del grupo.</td></tr>
+<tr><td>${esc(LAW_DUTIES.confidencialidad)}</td><td>Las cuentas retiradas pierden el acceso que otorgaba el grupo.</td></tr>
+<tr><td>${esc(LAW_DUTIES.responsabilidad)}</td><td>Registro verificable de quién otorgó o retiró accesos y cuándo.</td></tr></table>
+
+<h2>3. Detalle por cuenta</h2>
+<table><tr><th>Cuenta</th><th>Nombre</th><th style="width:14%">Resultado</th><th>Observación</th></tr>
+${changes
+  .map(
+    (c) =>
+      `<tr><td>${esc(c.upn)}</td><td>${esc(c.displayName ?? '')}</td><td><span class="pill ${c.status === 'error' ? 'err' : 'ok'}">${esc(c.status)}</span></td><td>${esc(c.error ?? (c.verified ? 'Verificado al releer la membresía' : 'Pendiente de replicación'))}</td></tr>`,
+  )
+  .join('')}
+${skipped.map((x) => `<tr><td>${esc(x.upn ?? x.input)}</td><td></td><td><span class="pill muted">sin cambio</span></td><td>${esc(SKIP_LABEL[x.status] ?? x.status)}</td></tr>`).join('')}</table>
+
+<h2>4. Membresía antes → después</h2>
+<p>${r.before?.count ?? 'n/e'} → ${r.after?.count ?? 'n/e'} miembros. Diferencia observada al releer el grupo: ${diffAdded.length} nuevos, ${diffRemoved.length} retirados.</p>
+${diffAdded.length ? `<h3>Miembros nuevos</h3><table><tr><th>Cuenta</th><th>Nombre</th></tr>${memberRows(diffAdded)}</table>` : ''}
+${diffRemoved.length ? `<h3>Miembros retirados</h3><table><tr><th>Cuenta</th><th>Nombre</th></tr>${memberRows(diffRemoved)}</table>` : ''}
+<details><summary>Membresía completa después del cambio (${r.after?.count ?? 0})</summary><table><tr><th>Cuenta</th><th>Nombre</th></tr>${memberRows(r.after?.members ?? [])}</table></details>`;
+  return layout({
+    code: `GOB-EVD-GRP-${String(r.jobId).slice(0, 8).toUpperCase()}`,
+    title: 'Acta de cambio de membresía de grupo',
+    subtitle: `${r.group?.displayName ?? ''} · ${r.environment?.name ?? ''} · ${fmtDateTime(r.finishedAt)}`,
+    ctx,
+    body,
+  });
+}

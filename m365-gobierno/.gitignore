@@ -5,3 +5,5 @@ backend/data/
 *.pfx
 *.pem
 *.tsbuildinfo
+# Node.js portátil que descarga iniciar.ps1 cuando falta
+.runtime/

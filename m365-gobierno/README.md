@@ -110,7 +110,10 @@ Forms, Sway…) se muestran como incluidas en la licencia.
 
 ## Puesta en marcha
 
-Requisitos: Node.js 20+. Para Exchange/Purview: PowerShell 7 (`pwsh`) en el servidor.
+Requisitos: Node.js 20+. En Windows, si `iniciar.bat` no encuentra Node.js (o la consola no lo
+ve porque se instaló después), lo busca en las rutas habituales y ofrece descargar una copia
+portátil oficial desde nodejs.org en `.runtime\` (verifica su SHA-256; no requiere administrador).
+Para Exchange/Purview: PowerShell 7 (`pwsh`) en el servidor.
 
 ```bash
 ./iniciar.sh            # macOS / Linux

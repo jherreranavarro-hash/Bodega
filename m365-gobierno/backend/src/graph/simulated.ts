@@ -270,6 +270,15 @@ export function demoTenant(): Store {
     '/devicemanagement/devicecompliancepolicies': [],
     '/devicemanagement/deviceconfigurations': [],
     '/devicemanagement/configurationpolicies': [],
+    '/devicemanagement/grouppolicyconfigurations': [],
+    ...officeAdmx(),
+    '/devicemanagement/detectedapps': [
+      { id: 'a1', displayName: 'Microsoft 365 Apps for business - es-es', version: '16.0.17932.21140', deviceCount: 12, platform: 'windows' },
+      { id: 'a2', displayName: 'Microsoft 365 Apps for business - es-es', version: '16.0.17932.21002', deviceCount: 9, platform: 'windows' },
+      { id: 'a3', displayName: 'Microsoft 365 Apps for business - en-us', version: '16.0.18025.20030', deviceCount: 4, platform: 'windows' },
+      { id: 'a4', displayName: 'Microsoft 365 Apps for business - es-es', version: '16.0.14334.20900', deviceCount: 3, platform: 'windows' },
+      { id: 'a5', displayName: 'Google Chrome', version: '131.0.6778.86', deviceCount: 25, platform: 'windows' },
+    ],
     '/devicemanagement': { id: 'deviceManagement', settings: { secureByDefault: false } },
     '/devicemanagement/deviceenrollmentconfigurations': [
       {
@@ -347,5 +356,24 @@ function demoGroupMembers(): Record<string, { '@odata.id': string }[]> {
     '/groups/g-m365/members/$ref': refs([20, 21, 22, 23, 42]),
     '/groups/g-ad/members/$ref': refs([30, 31, 32]),
     '/groups/g-rol/members/$ref': refs([1, 2]),
+  };
+}
+
+/** Plantillas administrativas de Office (Intune) que usan los playbooks de respuesta a vulnerabilidades. */
+function officeAdmx(): Record<string, any[]> {
+  const category = '\\Microsoft Office 2016 (Machine)\\Updates';
+  const defs = [
+    { id: 'gpd-office-autoupdates', displayName: 'Enable Automatic Updates' },
+    { id: 'gpd-office-hideupdates', displayName: 'Hide option to enable or disable updates' },
+    { id: 'gpd-office-deadline', displayName: 'Update Deadline' },
+    // Misma directiva en la plantilla de usuario: no debe elegirse
+    { id: 'gpd-office-deadline-user', displayName: 'Update Deadline', classType: 'user', categoryPath: '\\Microsoft Office 2016\\Updates' },
+  ];
+  return {
+    '/devicemanagement/grouppolicydefinitions': defs.map((d) => ({ classType: 'machine', categoryPath: category, policyType: 'admxBacked', ...d })),
+    '/devicemanagement/grouppolicydefinitions/gpd-office-deadline/presentations': [
+      { '@odata.type': '#microsoft.graph.groupPolicyPresentationText', id: 'p-label', label: 'Deadline (MM/DD/YYYY HH:MM)' },
+      { '@odata.type': '#microsoft.graph.groupPolicyPresentationTextBox', id: 'p-deadline', label: 'Deadline', required: true },
+    ],
   };
 }

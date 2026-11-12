@@ -115,6 +115,7 @@ const ISO: Record<string, string[]> = {
   'purview-message-encryption': ['5.14', '8.24'],
   'spo-sharing': ['5.14', '5.23', '8.3'],
   'purview-ediscovery-roles': ['5.3', '5.28', '8.2'],
+  'cve-2026-124194-outlook-ntlm': ['8.8', '5.26', '8.5', '8.20', '8.32'],
 };
 
 const LAW_BY_PILLAR: Record<Pillar, string[]> = {
@@ -131,6 +132,7 @@ const LAW_OVERRIDES: Record<string, string[]> = {
   'purview-labels': ['confidencialidad', 'seguridad', 'responsabilidad'],
   'spo-sharing': ['confidencialidad', 'seguridad'],
   'defender-mde-onboarding': ['seguridad', 'vulneraciones', 'responsabilidad'],
+  'cve-2026-124194-outlook-ntlm': ['seguridad', 'vulneraciones', 'responsabilidad'],
 };
 
 export interface ComplianceRef {

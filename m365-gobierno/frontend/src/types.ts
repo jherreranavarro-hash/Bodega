@@ -41,6 +41,8 @@ export interface Playbook {
   manualSteps?: { text: string; url?: string }[];
   docsUrl?: string;
   experimental?: boolean;
+  /** Vulnerabilidad publicada que mitiga (ISO 27001 A.8.8). */
+  advisory?: { id: string; title: string; cvss: number; exploited: boolean; published: string; kevDue?: string; affected: string; url: string };
   defaultDependsOn: string[];
   defaults: Params;
 }

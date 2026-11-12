@@ -247,6 +247,7 @@ main { padding: 20px 16px 120px; max-width: 1480px; margin: 0 auto; }
 .bullets li { margin-bottom: 3px; }
 .rec-box { border-left: 4px solid #eab308; background: color-mix(in srgb, #eab308 10%, var(--surface)); padding: 8px 10px; border-radius: 4px; font-size: .9rem; margin: 6px 0; }
 .rec-box.pr-P1 { border-color: #dc2626; background: color-mix(in srgb, #dc2626 8%, var(--surface)); }
+.advisory-box { display: flex; flex-direction: column; gap: 2px; border-left: 4px solid #b91c1c; background: color-mix(in srgb, #b91c1c 8%, var(--surface)); padding: 8px 10px; border-radius: 4px; font-size: .88rem; margin: 6px 0; }
 .deploy-box { font-size: .85rem; padding: 6px 10px; border-radius: 4px; margin: 6px 0; }
 .deploy-box.d-ok { background: color-mix(in srgb, #16a34a 12%, var(--surface)); }
 .deploy-box.d-error { background: color-mix(in srgb, #dc2626 12%, var(--surface)); }

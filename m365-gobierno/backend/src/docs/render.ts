@@ -110,7 +110,7 @@ header.dochead{display:grid;grid-template-columns:1fr auto;gap:8px;border-bottom
 .org{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#5d6878}
 h1{font-size:22px;margin:4px 0}h2{font-size:15.5px;margin:22px 0 8px;color:#0b3d7a;border-bottom:1px solid #d9dde3;padding-bottom:4px}h3{font-size:14px;margin:14px 0 6px}
 .meta{font-size:12px;text-align:right;color:#5d6878}.meta b{color:#1c2430}
-table{border-collapse:collapse;width:100%;margin:6px 0 12px;font-size:12.5px}th,td{border:1px solid #d9dde3;padding:5px 7px;text-align:left;vertical-align:top}th{background:#f1f4f8;font-weight:600}
+table{border-collapse:collapse;width:100%;margin:6px 0 12px;font-size:12.5px}th,td{border:1px solid #d9dde3;padding:5px 7px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#f1f4f8;font-weight:600}
 .pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
 .ok{background:#dcfce7;color:#166534}.warn{background:#fef3c7;color:#92400e}.err{background:#fee2e2;color:#991b1b}.plan{background:#dbeafe;color:#1e40af}.muted{background:#f1f5f9;color:#475569}
 .P1{background:#fee2e2;color:#991b1b}.P2{background:#fef3c7;color:#92400e}.P3{background:#f1f5f9;color:#475569}
@@ -154,6 +154,20 @@ function complianceTable(pbs: Playbook[]) {
   const lawRows = [...law.entries()].map(([id, set]) => `<tr><td>${esc(LAW_DUTIES[id])}</td><td>${[...set].map(esc).join('; ')}</td></tr>`).join('');
   return `<h3>ISO/IEC 27001:2022 — Anexo A</h3><table><tr><th style="width:9%">Control</th><th style="width:36%">Nombre</th><th>Implementado mediante</th></tr>${isoRows}</table>
 <h3>${esc(LAW_NAME)}</h3><table><tr><th style="width:45%">Principio / deber</th><th>Medidas que contribuyen</th></tr>${lawRows}</table>`;
+}
+
+/** Ficha de la vulnerabilidad que mitiga un playbook (ISO/IEC 27001:2022 A.8.8). */
+function advisoryTable(pb: Playbook, verification: { target: string; detail?: string }[] = []): string {
+  const a = pb.advisory;
+  if (!a) return '';
+  return `<div class="box"><b>Gestión de vulnerabilidades técnicas (ISO/IEC 27001:2022 A.8.8)</b></div>
+<table><tr><th style="width:26%">Vulnerabilidad</th><td><b>${esc(a.id)}</b> · ${esc(a.title)}</td></tr>
+<tr><th>Severidad</th><td>CVSS ${esc(a.cvss)} ${a.exploited ? '<span class="pill err">explotada activamente</span>' : ''}</td></tr>
+<tr><th>Productos afectados</th><td>${esc(a.affected)}</td></tr>
+<tr><th>Parche publicado</th><td>${fmtDate(`${a.published}T12:00:00`)}</td></tr>
+${a.kevDue ? `<tr><th>Plazo de corrección (CISA KEV)</th><td>${fmtDate(`${a.kevDue}T12:00:00`)}</td></tr>` : ''}
+<tr><th>Fuente oficial</th><td>${esc(a.url)}</td></tr>
+${verification.map((v) => `<tr><th>${esc(v.target)}</th><td>${esc(v.detail ?? '')}</td></tr>`).join('')}</table>`;
 }
 
 function paramTable(pb: Playbook, params: Params) {
@@ -315,7 +329,7 @@ export function renderPlaybookProcedure(pb: Playbook, ctx: DocContext): string {
 <tr><th>Método de ejecución</th><td>${esc(ENGINE[pb.engine])}</td></tr><tr><th>Fase / prioridad</th><td>Fase ${pb.phase} · ${esc(PHASES[pb.phase].name)}${rec ? ` · ${rec.priority}` : ''}</td></tr>
 <tr><th>Riesgo del cambio</th><td>${esc(pb.risk)}</td></tr><tr><th>Estado en ${esc(ctx.envName)}</th><td><span class="pill ${st.cls}">${esc(st.label)}</span></td></tr></table>
 <h2>1. Objetivo</h2><p>${esc(pb.summary)}</p>
-<h2>2. Justificación</h2>${
+<h2>2. Justificación</h2>${advisoryTable(pb)}${
     findings.length
       ? `<ul>${findings.map((f) => `<li><b>[${esc(f.severity)}] ${esc(f.title)}</b>: ${esc(f.detail)}</li>`).join('')}</ul>`
       : `<p>${esc(rec?.reason ?? 'Control de la línea base de seguridad recomendada por Microsoft para Business Premium.')}</p>`
@@ -404,6 +418,7 @@ export function renderEvidence(ev: { record: any; hash: string; valid: boolean }
 <tr><th>Ley 21.719</th><td>${c.law.map((x) => esc(x.name)).join('<br>')}</td></tr>
 ${res.error ? `<tr><th>Observación</th><td>${esc(res.error)}</td></tr>` : ''}
 <tr><th>Resumen</th><td>${res.steps.map((s) => `${esc(s.action)}: ${esc(s.target)}`).join('<br>') || '—'}</td></tr></table>
+${pb?.advisory ? advisoryTable(pb, res.steps.filter((s) => /^(Verificación del parche|Sin parche|Sin verificar)/.test(s.target))) : ''}
 ${evs.length ? evs.map(evidenceRows).join('') : '<p class="note">Sin escrituras: la configuración ya estaba conforme (sin cambios).</p>'}`;
     })
     .join('');

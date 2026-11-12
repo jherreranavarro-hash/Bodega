@@ -91,6 +91,22 @@ Las referencias legales son orientativas y deben validarse con asesoría legal.
 | **Defender** | Antivirus NGP + bloqueo a primera vista, reglas ASR, Safe Links, Safe Attachments, antiphishing, bloqueo de reenvío externo, endurecimiento de Exchange (SMTP AUTH, etiqueta externa, DKIM) | Graph + Exchange PowerShell |
 | **Purview** | Auditoría unificada, etiquetas de confidencialidad (con cifrado), DLP (RUT, tarjetas, IBAN…), retención, archivo, cifrado de mensajes, uso compartido SharePoint/OneDrive | Purview/Exchange PowerShell + Graph |
 
+**Respuesta a vulnerabilidades.** El playbook *Respuesta CVE-2026-124194* (caja *Defender
+Vulnerability Management*) mitiga la fuga de hash NTLMv2 de Outlook explotada activamente:
+
+- plantilla administrativa de Office: actualizaciones automáticas obligatorias, sin opción de
+  desactivarlas, con fecha límite (por defecto 3 días; CISA fija el 24-11-2026);
+- regla de firewall de Windows que bloquea TCP 445 saliente hacia direcciones públicas (u
+  opcionalmente hacia cualquier destino), sin afectar servidores de archivos internos;
+- restricción de NTLM saliente: *auditar* por defecto, *bloquear* en el perfil estricto;
+- verificación del parche con el inventario de aplicaciones de Intune, comparando cada
+  compilación de Office con las corregidas (parámetro editable: confírmalas en MSRC).
+
+Todo se asigna a todos los equipos administrados. El acta de evidencia agrega la ficha de
+gestión de vulnerabilidades técnicas (ISO 27001 **A.8.8**: CVE, CVSS, plazo, equipos con y sin
+parche) además de A.5.26, A.8.5, A.8.20 y A.8.32. Está marcado *Validar en tenant de pruebas*:
+despliégalo primero en DEV o POC.
+
 Lo que Microsoft **no expone por API** (SSPR, conector Defender↔Intune, tamper protection,
 filtrado web, Autopatch, términos de uso…) aparece como **playbook guiado**: pasos con enlace
 directo al portal y botón "Marcar como completado". Las cajas de productividad (Bookings,

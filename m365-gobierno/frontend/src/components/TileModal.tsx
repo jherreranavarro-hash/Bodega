@@ -86,6 +86,21 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
         </div>
       </header>
 
+      {pb.advisory && (
+        <div className="advisory-box">
+          <b>
+            {pb.advisory.id} · CVSS {pb.advisory.cvss}
+            {pb.advisory.exploited ? ' · explotada activamente' : ''}
+          </b>
+          <span>
+            {pb.advisory.title}. Afecta a: {pb.advisory.affected}.
+            {pb.advisory.kevDue && ` Plazo de corrección (CISA): ${new Date(`${pb.advisory.kevDue}T12:00:00`).toLocaleDateString('es-CL')}.`}{' '}
+            <a href={pb.advisory.url} target="_blank" rel="noreferrer">
+              Ficha oficial (MSRC)
+            </a>
+          </span>
+        </div>
+      )}
       {rec && (
         <div className={`rec-box pr-${rec.priority}`}>
           <b>{rec.priority} · Recomendado para tu empresa.</b> {rec.reason}

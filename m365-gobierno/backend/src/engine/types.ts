@@ -87,10 +87,25 @@ export interface Playbook {
   docsUrl?: string;
   /** Marcado cuando los identificadores usados deben validarse en un tenant de pruebas. */
   experimental?: boolean;
+  /** Vulnerabilidad publicada que este playbook mitiga (ISO 27001 A.8.8). */
+  advisory?: Advisory;
   /** Motor graph: lee, compara y (si !dryRun) aplica. Debe ser idempotente. */
   run?: (ctx: Ctx, params: Params) => Promise<PlanStep[]>;
   /** Motores exo/ipps: cuerpo de script idempotente (sin la conexión). */
   script?: (params: Params, tenant: TenantInfo) => string;
+}
+
+export interface Advisory {
+  id: string;
+  title: string;
+  cvss: number;
+  exploited: boolean;
+  /** Fecha de publicación del parche (AAAA-MM-DD). */
+  published: string;
+  /** Plazo de corrección del catálogo KEV de CISA, si aplica. */
+  kevDue?: string;
+  affected: string;
+  url: string;
 }
 
 export interface Tile {
